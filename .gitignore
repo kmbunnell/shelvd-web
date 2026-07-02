@@ -481,3 +481,6 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 plan.md
+
+# Local Supabase config — never commit real values
+Shelvd.Web.Client/wwwroot/appsettings.json
