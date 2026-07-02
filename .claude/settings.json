@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "matcher": "plan-implementer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "dotnet build --no-restore -q && dotnet format --no-restore",
+            "timeout": 120,
+            "statusMessage": "Running dotnet format..."
+          }
+        ]
+      }
+    ]
+  }
+}
