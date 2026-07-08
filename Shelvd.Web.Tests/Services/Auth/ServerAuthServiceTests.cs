@@ -12,7 +12,7 @@ namespace Shelvd.Web.Tests.Services.Auth;
 
 public class ServerAuthServiceTests
 {
-    private static readonly NullLogger<ServerAuthService> Logger = NullLogger<ServerAuthService>.Instance;
+    private static readonly NullLogger<ServerAuthService> _logger = NullLogger<ServerAuthService>.Instance;
 
     private static Session CreateSession(string userId = "user-1", string email = "user@example.com") => new()
     {
@@ -35,7 +35,7 @@ public class ServerAuthServiceTests
         gotrueClient
             .Setup(c => c.SignInWithPassword("user@example.com", "password"))
             .ReturnsAsync(CreateSession());
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, Logger);
+        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
 
         var result = await sut.SignInAsync("user@example.com", "password");
 
@@ -54,7 +54,7 @@ public class ServerAuthServiceTests
         gotrueClient
             .Setup(c => c.SignInWithPassword(It.IsAny<string>(), It.IsAny<string>()))
             .ThrowsAsync(new GotrueException("bad login", FailureHint.Reason.UserBadLogin));
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, Logger);
+        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
 
         var result = await sut.SignInAsync("user@example.com", "wrong-password");
 
@@ -69,7 +69,7 @@ public class ServerAuthServiceTests
         gotrueClient
             .Setup(c => c.SignInWithPassword(It.IsAny<string>(), It.IsAny<string>()))
             .ThrowsAsync(new InvalidOperationException("boom"));
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, Logger);
+        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
 
         var result = await sut.SignInAsync("user@example.com", "password");
 
@@ -84,7 +84,7 @@ public class ServerAuthServiceTests
         gotrueClient
             .Setup(c => c.SignUp("new@example.com", "password", null))
             .ReturnsAsync(CreateSession(email: "new@example.com"));
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, Logger);
+        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
 
         var result = await sut.SignUpAsync("new@example.com", "password");
 
@@ -98,7 +98,7 @@ public class ServerAuthServiceTests
         gotrueClient
             .Setup(c => c.SignUp("new@example.com", "password", null))
             .ReturnsAsync((Session?)null);
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, Logger);
+        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
 
         var result = await sut.SignUpAsync("new@example.com", "password");
 
@@ -116,7 +116,7 @@ public class ServerAuthServiceTests
         gotrueClient
             .Setup(c => c.SignUp(It.IsAny<string>(), It.IsAny<string>(), null))
             .ThrowsAsync(new GotrueException("bad signup", reason));
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, Logger);
+        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
 
         var result = await sut.SignUpAsync("new@example.com", "password");
 
@@ -128,7 +128,7 @@ public class ServerAuthServiceTests
     public async Task SignOutAsync_CallsGotrueSignOut()
     {
         var gotrueClient = new Mock<IGotrueClient<User, Session>>();
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, Logger);
+        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
 
         await sut.SignOutAsync();
 
@@ -145,7 +145,7 @@ public class ServerAuthServiceTests
         };
         var httpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth")) };
         var gotrueClient = new Mock<IGotrueClient<User, Session>>();
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor(httpContext).Object, Logger);
+        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor(httpContext).Object, _logger);
 
         await sut.SignOutAsync();
 
@@ -157,7 +157,7 @@ public class ServerAuthServiceTests
     public async Task SignOutAsync_SkipsSessionRestore_WhenNoTokensOnUser()
     {
         var gotrueClient = new Mock<IGotrueClient<User, Session>>();
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, Logger);
+        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
 
         await sut.SignOutAsync();
 
