@@ -1,0 +1,76 @@
+@page "/login"
+@using System.ComponentModel.DataAnnotations
+@using Shelvd.Web.Common
+@using Shelvd.Web.Services.Auth
+@inject IAuthService AuthService
+@inject IAuthCookieService AuthCookieService
+@inject NavigationManager Navigation
+
+<PageTitle>Log in</PageTitle>
+
+<h1>Log in</h1>
+
+@if (_errorMessage is not null)
+{
+    <p class="validation-message" role="alert">@_errorMessage</p>
+}
+
+<EditForm Model="Input!" FormName="login" OnValidSubmit="HandleLoginAsync">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    <div>
+        <label for="email">Email</label>
+        <InputText id="email" @bind-Value="Input!.Email" />
+    </div>
+    <div>
+        <label for="password">Password</label>
+        <InputText id="password" type="password" @bind-Value="Input!.Password" />
+    </div>
+    <button type="submit">Log in</button>
+</EditForm>
+
+@code {
+    [SupplyParameterFromForm]
+    private LoginInput? Input { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private string? _errorMessage;
+
+    protected override void OnInitialized() => Input ??= new LoginInput();
+
+    private async Task HandleLoginAsync()
+    {
+        _errorMessage = null;
+        var result = await AuthService.SignInAsync(Input!.Email, Input.Password);
+
+        if (result is Result<AuthSession?, AuthError>.Failure failure)
+        {
+            _errorMessage = AuthErrorMessages.For(failure.Error);
+            return;
+        }
+
+        if (result is Result<AuthSession?, AuthError>.Success { Value: not null } success)
+        {
+            await AuthCookieService.SignInAsync(success.Value);
+            Navigation.NavigateTo(GetSafeReturnUrl(), forceLoad: true);
+        }
+    }
+
+    private string GetSafeReturnUrl() =>
+        ReturnUrl is not null && ReturnUrl.StartsWith('/') && !ReturnUrl.StartsWith("//") && !ReturnUrl.StartsWith("/\\")
+            ? ReturnUrl
+            : "/";
+
+    private sealed class LoginInput
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [Required]
+        public string Password { get; set; } = string.Empty;
+    }
+}

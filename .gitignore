@@ -484,3 +484,7 @@ plan.md
 
 # Local Supabase config — never commit real values
 Shelvd.Web.Client/wwwroot/appsettings.json
+Shelvd.Web/appsettings.json
+
+# Local Data Protection key ring — machine-specific, never commit
+Shelvd.Web/keys/
