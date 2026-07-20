@@ -171,13 +171,13 @@ static bool IsStaticAssetRequest(PathString path)
         return true;
     }
 
-    return StaticAssetExtensions.Contains(Path.GetExtension(value));
+    return _staticAssetExtensions.Contains(Path.GetExtension(value));
 }
 
 // Exposed for WebApplicationFactory<Program> in integration tests.
 public partial class Program
 {
-    private static readonly HashSet<string> StaticAssetExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> _staticAssetExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".css", ".js", ".map", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
         ".woff", ".woff2", ".ttf", ".eot", ".wasm", ".dll"
