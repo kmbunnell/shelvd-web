@@ -42,6 +42,37 @@ public class HttpContextAuthCookieServiceTests
     }
 
     [Fact]
+    public async Task SignInAsync_PassesSuppliedPropertiesThrough_WhenProvided()
+    {
+        var (sut, authenticationService, httpContext) = CreateSut();
+        var session = new AuthSession("user-1", "user@example.com", "access-token", "refresh-token");
+        var properties = new AuthenticationProperties { IssuedUtc = DateTimeOffset.UtcNow, ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(30) };
+
+        await sut.SignInAsync(session, properties);
+
+        authenticationService.Verify(a => a.SignInAsync(
+            httpContext,
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            It.IsAny<ClaimsPrincipal>(),
+            properties), Times.Once);
+    }
+
+    [Fact]
+    public async Task SignInAsync_PassesNullProperties_WhenNotProvided()
+    {
+        var (sut, authenticationService, httpContext) = CreateSut();
+        var session = new AuthSession("user-1", "user@example.com", "access-token", "refresh-token");
+
+        await sut.SignInAsync(session);
+
+        authenticationService.Verify(a => a.SignInAsync(
+            httpContext,
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            It.IsAny<ClaimsPrincipal>(),
+            null), Times.Once);
+    }
+
+    [Fact]
     public async Task SignOutAsync_SignsOutCookieScheme()
     {
         var (sut, authenticationService, httpContext) = CreateSut();

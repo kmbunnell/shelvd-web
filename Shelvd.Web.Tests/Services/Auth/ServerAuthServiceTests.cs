@@ -1,7 +1,11 @@
+using System.Net;
+using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Moq.Protected;
 using Shelvd.Web.Common;
 using Shelvd.Web.Services.Auth;
 using Supabase.Gotrue;
@@ -28,6 +32,34 @@ public class ServerAuthServiceTests
         return accessor;
     }
 
+    private static Mock<IHttpClientFactory> CreateHttpClientFactory(HttpStatusCode statusCode, object? content)
+    {
+        var handler = new Mock<HttpMessageHandler>();
+        handler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(statusCode)
+            {
+                Content = content is null ? null : JsonContent.Create(content)
+            });
+
+        var factory = new Mock<IHttpClientFactory>();
+        factory
+            .Setup(f => f.CreateClient(ServerAuthService.GotrueHttpClientName))
+            .Returns(new HttpClient(handler.Object) { BaseAddress = new Uri("https://test.supabase.co/auth/v1/") });
+        return factory;
+    }
+
+    private static ServerAuthService CreateSut(
+        Mock<IGotrueClient<User, Session>> gotrueClient,
+        Mock<IHttpClientFactory>? httpClientFactory = null,
+        HttpContext? httpContext = null) =>
+        new(
+            gotrueClient.Object,
+            (httpClientFactory ?? CreateHttpClientFactory(HttpStatusCode.OK, content: null)).Object,
+            CreateHttpContextAccessor(httpContext).Object,
+            _logger);
+
     [Fact]
     public async Task SignInAsync_ReturnsSuccessWithSession_WhenCredentialsAreValid()
     {
@@ -35,7 +67,7 @@ public class ServerAuthServiceTests
         gotrueClient
             .Setup(c => c.SignInWithPassword("user@example.com", "password"))
             .ReturnsAsync(CreateSession());
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
+        var sut = CreateSut(gotrueClient);
 
         var result = await sut.SignInAsync("user@example.com", "password");
 
@@ -54,7 +86,7 @@ public class ServerAuthServiceTests
         gotrueClient
             .Setup(c => c.SignInWithPassword(It.IsAny<string>(), It.IsAny<string>()))
             .ThrowsAsync(new GotrueException("bad login", FailureHint.Reason.UserBadLogin));
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
+        var sut = CreateSut(gotrueClient);
 
         var result = await sut.SignInAsync("user@example.com", "wrong-password");
 
@@ -69,7 +101,7 @@ public class ServerAuthServiceTests
         gotrueClient
             .Setup(c => c.SignInWithPassword(It.IsAny<string>(), It.IsAny<string>()))
             .ThrowsAsync(new InvalidOperationException("boom"));
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
+        var sut = CreateSut(gotrueClient);
 
         var result = await sut.SignInAsync("user@example.com", "password");
 
@@ -84,7 +116,7 @@ public class ServerAuthServiceTests
         gotrueClient
             .Setup(c => c.SignUp("new@example.com", "password", null))
             .ReturnsAsync(CreateSession(email: "new@example.com"));
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
+        var sut = CreateSut(gotrueClient);
 
         var result = await sut.SignUpAsync("new@example.com", "password");
 
@@ -98,7 +130,7 @@ public class ServerAuthServiceTests
         gotrueClient
             .Setup(c => c.SignUp("new@example.com", "password", null))
             .ReturnsAsync((Session?)null);
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
+        var sut = CreateSut(gotrueClient);
 
         var result = await sut.SignUpAsync("new@example.com", "password");
 
@@ -116,7 +148,7 @@ public class ServerAuthServiceTests
         gotrueClient
             .Setup(c => c.SignUp(It.IsAny<string>(), It.IsAny<string>(), null))
             .ThrowsAsync(new GotrueException("bad signup", reason));
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
+        var sut = CreateSut(gotrueClient);
 
         var result = await sut.SignUpAsync("new@example.com", "password");
 
@@ -125,43 +157,144 @@ public class ServerAuthServiceTests
     }
 
     [Fact]
-    public async Task SignOutAsync_CallsGotrueSignOut()
+    public async Task RefreshSessionAsync_ReturnsSuccessWithNewTokens_WhenSupabaseAcceptsTheRefreshToken()
     {
         var gotrueClient = new Mock<IGotrueClient<User, Session>>();
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
+        var httpClientFactory = CreateHttpClientFactory(HttpStatusCode.OK, new
+        {
+            access_token = "new-access-token",
+            refresh_token = "new-refresh-token",
+            user = new { id = "user-1", email = "user@example.com" }
+        });
+        var sut = CreateSut(gotrueClient, httpClientFactory);
 
-        await sut.SignOutAsync();
+        var result = await sut.RefreshSessionAsync("old-access-token", "old-refresh-token");
 
-        gotrueClient.Verify(c => c.SignOut(Constants.SignOutScope.Local), Times.Once);
+        var success = Assert.IsType<Result<AuthSession, AuthError>.Success>(result);
+        Assert.Equal("user-1", success.Value.UserId);
+        Assert.Equal("user@example.com", success.Value.Email);
+        Assert.Equal("new-access-token", success.Value.AccessToken);
+        Assert.Equal("new-refresh-token", success.Value.RefreshToken);
+        gotrueClient.Verify(c => c.SetSession(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
-    public async Task SignOutAsync_RestoresSessionBeforeSigningOut_WhenTokensArePresentOnUser()
+    public async Task RefreshSessionAsync_SendsRefreshTokenToTheGotrueTokenEndpoint()
     {
-        var claims = new[]
-        {
-            new Claim(AuthClaimTypes.AccessToken, "access-token"),
-            new Claim(AuthClaimTypes.RefreshToken, "refresh-token")
-        };
+        var gotrueClient = new Mock<IGotrueClient<User, Session>>();
+        HttpRequestMessage? capturedRequest = null;
+        string? capturedBody = null;
+        var handler = new Mock<HttpMessageHandler>();
+        handler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((request, _) =>
+            {
+                capturedRequest = request;
+                capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            })
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new
+                {
+                    access_token = "new-access-token",
+                    refresh_token = "new-refresh-token",
+                    user = new { id = "user-1", email = "user@example.com" }
+                })
+            });
+        var factory = new Mock<IHttpClientFactory>();
+        factory
+            .Setup(f => f.CreateClient(ServerAuthService.GotrueHttpClientName))
+            .Returns(new HttpClient(handler.Object) { BaseAddress = new Uri("https://test.supabase.co/auth/v1/") });
+        var sut = CreateSut(gotrueClient, factory);
+
+        await sut.RefreshSessionAsync("old-access-token", "old-refresh-token");
+
+        Assert.NotNull(capturedRequest);
+        Assert.Equal("/auth/v1/token", capturedRequest!.RequestUri!.AbsolutePath);
+        Assert.Equal("?grant_type=refresh_token", capturedRequest.RequestUri.Query);
+        using var body = JsonDocument.Parse(capturedBody!);
+        Assert.Equal("old-refresh-token", body.RootElement.GetProperty("refresh_token").GetString());
+    }
+
+    [Fact]
+    public async Task RefreshSessionAsync_ReturnsUnknown_WhenSupabaseRejectsTheRefreshToken()
+    {
+        var gotrueClient = new Mock<IGotrueClient<User, Session>>();
+        var httpClientFactory = CreateHttpClientFactory(HttpStatusCode.Unauthorized, content: null);
+        var sut = CreateSut(gotrueClient, httpClientFactory);
+
+        var result = await sut.RefreshSessionAsync("old-access-token", "old-refresh-token");
+
+        var failure = Assert.IsType<Result<AuthSession, AuthError>.Failure>(result);
+        Assert.Equal(AuthError.Unknown, failure.Error);
+    }
+
+    [Fact]
+    public async Task RefreshSessionAsync_ReturnsUnknown_WhenHttpCallThrows()
+    {
+        var gotrueClient = new Mock<IGotrueClient<User, Session>>();
+        var handler = new Mock<HttpMessageHandler>();
+        handler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("network unreachable"));
+        var factory = new Mock<IHttpClientFactory>();
+        factory
+            .Setup(f => f.CreateClient(ServerAuthService.GotrueHttpClientName))
+            .Returns(new HttpClient(handler.Object) { BaseAddress = new Uri("https://test.supabase.co/auth/v1/") });
+        var sut = CreateSut(gotrueClient, factory);
+
+        var result = await sut.RefreshSessionAsync("old-access-token", "old-refresh-token");
+
+        var failure = Assert.IsType<Result<AuthSession, AuthError>.Failure>(result);
+        Assert.Equal(AuthError.Unknown, failure.Error);
+    }
+
+    [Fact]
+    public async Task SignOutAsync_PostsToGotrueLogoutEndpoint_WhenAccessTokenPresent()
+    {
+        var claims = new[] { new Claim(AuthClaimTypes.AccessToken, "access-token") };
         var httpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth")) };
         var gotrueClient = new Mock<IGotrueClient<User, Session>>();
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor(httpContext).Object, _logger);
+        HttpRequestMessage? capturedRequest = null;
+        var handler = new Mock<HttpMessageHandler>();
+        handler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((request, _) => capturedRequest = request)
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.NoContent));
+        var factory = new Mock<IHttpClientFactory>();
+        factory
+            .Setup(f => f.CreateClient(ServerAuthService.GotrueHttpClientName))
+            .Returns(new HttpClient(handler.Object) { BaseAddress = new Uri("https://test.supabase.co/auth/v1/") });
+        var sut = CreateSut(gotrueClient, factory, httpContext);
 
         await sut.SignOutAsync();
 
-        gotrueClient.Verify(c => c.SetSession("access-token", "refresh-token", false), Times.Once);
-        gotrueClient.Verify(c => c.SignOut(Constants.SignOutScope.Local), Times.Once);
+        Assert.NotNull(capturedRequest);
+        Assert.Equal(HttpMethod.Post, capturedRequest!.Method);
+        Assert.Equal("https://test.supabase.co/auth/v1/logout?scope=local", capturedRequest.RequestUri!.ToString());
+        Assert.Equal("Bearer", capturedRequest.Headers.Authorization?.Scheme);
+        Assert.Equal("access-token", capturedRequest.Headers.Authorization?.Parameter);
+        gotrueClient.Verify(c => c.SetSession(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
+        gotrueClient.Verify(c => c.SignOut(It.IsAny<Constants.SignOutScope>()), Times.Never);
     }
 
     [Fact]
-    public async Task SignOutAsync_SkipsSessionRestore_WhenNoTokensOnUser()
+    public async Task SignOutAsync_SkipsHttpCall_WhenNoAccessTokenOnUser()
     {
         var gotrueClient = new Mock<IGotrueClient<User, Session>>();
-        var sut = new ServerAuthService(gotrueClient.Object, CreateHttpContextAccessor().Object, _logger);
+        var handler = new Mock<HttpMessageHandler>();
+        var factory = new Mock<IHttpClientFactory>();
+        factory
+            .Setup(f => f.CreateClient(ServerAuthService.GotrueHttpClientName))
+            .Returns(new HttpClient(handler.Object) { BaseAddress = new Uri("https://test.supabase.co/auth/v1/") });
+        var sut = CreateSut(gotrueClient, factory);
 
         await sut.SignOutAsync();
 
-        gotrueClient.Verify(c => c.SetSession(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
-        gotrueClient.Verify(c => c.SignOut(Constants.SignOutScope.Local), Times.Once);
+        handler.Protected().Verify(
+            "SendAsync", Times.Never(), ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>());
     }
 }
