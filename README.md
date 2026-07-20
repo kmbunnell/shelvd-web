@@ -2,7 +2,7 @@
 
 A Blazor Web App companion to [Shelvd](https://github.com/kmbunnell/books-kmp), a Kotlin Multiplatform mobile app for tracking your book collection. Shelvd Web lets users manage their library from a browser, sharing the same Supabase backend as the mobile app.
 
-Portfolio project — built to demonstrate a production-shaped .NET/Blazor stack (server prerendering + WASM, Supabase auth/data, CI, TDD) after five years primarily in Android/KMP.
+Portfolio project — built to demonstrate a production-shaped .NET/Blazor stack (server prerendering + WASM, Supabase auth/data, CI, TDD) 
 
 ## Status
 

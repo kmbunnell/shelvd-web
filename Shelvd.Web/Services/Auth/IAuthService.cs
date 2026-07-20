@@ -12,5 +12,10 @@ public interface IAuthService
 {
     Task<Result<AuthSession?, AuthError>> SignInAsync(string email, string password);
     Task<Result<AuthSession?, AuthError>> SignUpAsync(string email, string password);
+
+    // Unlike SignInAsync/SignUpAsync, the success case is never null here: a refresh either
+    // yields a usable session or is a Failure — there's no "succeeded but no session" state
+    // (that only applies to sign-up's email-confirmation flow).
+    Task<Result<AuthSession, AuthError>> RefreshSessionAsync(string accessToken, string refreshToken);
     Task SignOutAsync();
 }
