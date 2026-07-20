@@ -20,6 +20,11 @@ a, .btn-link {
     padding-top: 1.1rem;
 }
 
+.auth-container {
+    max-width: 400px;
+    margin: 2rem auto;
+}
+
 h1:focus {
     outline: none;
 }
