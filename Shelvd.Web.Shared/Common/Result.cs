@@ -1,4 +1,4 @@
-namespace Shelvd.Web.Common;
+namespace Shelvd.Web.Shared.Common;
 
 public abstract record Result<TValue, TError>
 {

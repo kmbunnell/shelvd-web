@@ -1,4 +1,4 @@
-using Shelvd.Web.Common;
+using Shelvd.Web.Shared.Common;
 
 namespace Shelvd.Web.Services.Auth;
 

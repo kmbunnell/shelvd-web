@@ -1,0 +1,77 @@
+@page "/library"
+@attribute [Authorize]
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@implements IDisposable
+@using Microsoft.AspNetCore.Authorization
+@using Shelvd.Web.Shared.Common
+@using Shelvd.Web.Client.Models
+@using Shelvd.Web.Client.Services.Books
+@inject IBooksApiClient BooksApiClient
+
+<PageTitle>Library</PageTitle>
+
+<h1>Library</h1>
+
+@if (_result is null)
+{
+    <p role="status">Loading your books...</p>
+}
+else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Failure)
+{
+    <p role="alert">An error occurred while loading your books. Please try again later.</p>
+    <button @onclick="LoadBooksAsync">Retry</button>
+}
+else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success success)
+{
+    if (success.Value.Count == 0)
+    {
+        <p>You have no books in your library yet.</p>
+    }
+    else
+    {
+        <ul class="library-list">
+            @foreach (var book in success.Value)
+            {
+                <li>
+                    @if (book.CoverImageUrl is not null)
+                    {
+                        <img src="@book.CoverImageUrl" alt="Cover of @book.Title" />
+                    }
+                    <span class="book-title">@book.Title</span>
+                    <span class="book-authors">@string.Join(", ", book.Authors)</span>
+                </li>
+            }
+        </ul>
+    }
+}
+
+@code {
+    private Result<IReadOnlyList<BookDto>, BooksApiError>? _result;
+    private CancellationTokenSource? _cts;
+
+    protected override Task OnInitializedAsync() => LoadBooksAsync();
+
+    private async Task LoadBooksAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+
+        _result = null;
+        try
+        {
+            _result = await BooksApiClient.GetBooksAsync(_cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a subsequent LoadBooksAsync call (retry) or the component
+            // was disposed before the fetch completed — either way, nothing to render.
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}
