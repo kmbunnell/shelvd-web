@@ -4,8 +4,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Moq.Protected;
 using Shelvd.Web.Client.Models;
-using Shelvd.Web.Shared.Common;
 using Shelvd.Web.Services.Books;
+using Shelvd.Web.Shared.Common;
 
 namespace Shelvd.Web.Tests.Services.Books;
 

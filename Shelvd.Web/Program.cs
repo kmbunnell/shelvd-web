@@ -4,11 +4,11 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Shelvd.Web.Client.Models;
 using Shelvd.Web.Client.Pages;
-using Shelvd.Web.Shared.Common;
 using Shelvd.Web.Components;
 using Shelvd.Web.Middleware;
 using Shelvd.Web.Services.Auth;
 using Shelvd.Web.Services.Books;
+using Shelvd.Web.Shared.Common;
 using Supabase.Gotrue;
 using Supabase.Gotrue.Interfaces;
 

@@ -2,8 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using Moq;
 using Moq.Protected;
-using Shelvd.Web.Shared.Common;
 using Shelvd.Web.Client.Services.Books;
+using Shelvd.Web.Shared.Common;
 
 namespace Shelvd.Web.Tests.Services.Books;
 
