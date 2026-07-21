@@ -1,10 +1,10 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using Shelvd.Web.Shared.Common;
 using Shelvd.Web.Client.Models;
 using Shelvd.Web.Client.Pages;
 using Shelvd.Web.Client.Services.Books;
+using Shelvd.Web.Shared.Common;
 
 namespace Shelvd.Web.Tests.Pages;
 

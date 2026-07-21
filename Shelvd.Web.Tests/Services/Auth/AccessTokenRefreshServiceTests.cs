@@ -8,8 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
-using Shelvd.Web.Shared.Common;
 using Shelvd.Web.Services.Auth;
+using Shelvd.Web.Shared.Common;
 
 namespace Shelvd.Web.Tests.Services.Auth;
 

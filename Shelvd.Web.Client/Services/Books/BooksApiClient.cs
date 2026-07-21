@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
-using Shelvd.Web.Shared.Common;
 using Shelvd.Web.Client.Models;
+using Shelvd.Web.Shared.Common;
 
 namespace Shelvd.Web.Client.Services.Books;
 

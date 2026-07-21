@@ -8,9 +8,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Shelvd.Web.Client.Models;
-using Shelvd.Web.Shared.Common;
 using Shelvd.Web.Services.Auth;
 using Shelvd.Web.Services.Books;
+using Shelvd.Web.Shared.Common;
 
 namespace Shelvd.Web.Tests;
 
