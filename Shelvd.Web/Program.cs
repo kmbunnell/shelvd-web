@@ -2,10 +2,13 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Shelvd.Web.Client.Models;
 using Shelvd.Web.Client.Pages;
+using Shelvd.Web.Shared.Common;
 using Shelvd.Web.Components;
 using Shelvd.Web.Middleware;
 using Shelvd.Web.Services.Auth;
+using Shelvd.Web.Services.Books;
 using Supabase.Gotrue;
 using Supabase.Gotrue.Interfaces;
 
@@ -45,6 +48,21 @@ builder.Services
         // refreshes rather than a hard cutoff tied to the original login.
         options.ExpireTimeSpan = AuthCookieOptions.ExpireTimeSpan;
         options.SlidingExpiration = false;
+        // Without this, an unauthenticated /api/* request gets the same 302-to-/login
+        // response as an unauthenticated page navigation. HttpClient follows that redirect
+        // automatically, so callers like BooksApiClient would receive a 200 OK with the
+        // login page's HTML instead of a 401 they can detect.
+        options.Events.OnRedirectToLogin = context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api"))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            }
+
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
     });
 builder.Services.AddAuthorization();
 
@@ -67,10 +85,16 @@ builder.Services.AddHttpClient(ServerAuthService.GotrueHttpClientName, client =>
     client.BaseAddress = new Uri($"{supabaseUrl}/auth/v1/");
     client.DefaultRequestHeaders.Add("apikey", supabaseAnonKey);
 });
+builder.Services.AddHttpClient(BooksService.SupabaseRestHttpClientName, client =>
+{
+    client.BaseAddress = new Uri($"{supabaseUrl}/rest/v1/");
+    client.DefaultRequestHeaders.Add("apikey", supabaseAnonKey);
+});
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IAuthService, ServerAuthService>();
 builder.Services.AddScoped<IAuthCookieService, HttpContextAuthCookieService>();
 builder.Services.AddScoped<IAccessTokenRefreshService, AccessTokenRefreshService>();
+builder.Services.AddScoped<IBooksService, BooksService>();
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, PersistingAuthenticationStateProvider>();
@@ -153,6 +177,28 @@ app.MapPost("/logout", async (
 
     return await next(context);
 });
+
+app.MapGet("/api/books", async (HttpContext httpContext, IBooksService booksService) =>
+{
+    var accessToken = httpContext.User.FindFirst(AuthClaimTypes.AccessToken)?.Value;
+    if (accessToken is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var result = await booksService.GetBooksAsync(accessToken);
+    return result switch
+    {
+        Result<IReadOnlyList<BookDto>, BooksError>.Success success => Results.Ok(success.Value),
+        Result<IReadOnlyList<BookDto>, BooksError>.Failure failure => failure.Error switch
+        {
+            BooksError.Unauthenticated => Results.Unauthorized(),
+            _ => Results.StatusCode(StatusCodes.Status502BadGateway)
+        },
+        _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+    };
+})
+.RequireAuthorization();
 
 app.Run();
 

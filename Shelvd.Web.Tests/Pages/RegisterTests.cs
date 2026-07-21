@@ -2,7 +2,7 @@ using Bunit;
 using Bunit.TestDoubles;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using Shelvd.Web.Common;
+using Shelvd.Web.Shared.Common;
 using Shelvd.Web.Components.Pages;
 using Shelvd.Web.Services.Auth;
 

@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Moq.Protected;
-using Shelvd.Web.Common;
+using Shelvd.Web.Shared.Common;
 using Shelvd.Web.Services.Auth;
 using Supabase.Gotrue;
 using Supabase.Gotrue.Exceptions;

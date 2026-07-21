@@ -57,3 +57,7 @@ Server-side secrets (Google Books API key, Supabase service role key) go in `She
 - `var` preferred when type is apparent
 - 4-space indent for C#/Razor, 2-space for JSON/YAML/XML
 - `TreatWarningsAsErrors` is on — fix warnings, don't suppress them
+- Build query strings with `QueryHelpers.AddQueryString` (`Microsoft.AspNetCore.WebUtilities`, free via the `Microsoft.NET.Sdk.Web` SDK) rather than hand-concatenated literals
+- `CancellationToken` handling differs by side, since the two have different lifetimes:
+  - `Shelvd.Web.Client` (WASM) methods take `CancellationToken cancellationToken = default` and thread it through every downstream async call (`HttpClient` calls, `ReadFromJsonAsync`, etc.), catching and rethrowing `OperationCanceledException` before other exception handlers — a call's lifetime can outlive the component/screen that started it (e.g. user navigates away), so it needs to be cancellable independently.
+  - `Shelvd.Web` (server) methods don't take an explicit `CancellationToken` — they're already scoped to the incoming HTTP request, which has its own cancellation via `HttpContext.RequestAborted`.
