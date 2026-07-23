@@ -1,0 +1,50 @@
+.popover-backdrop {
+    position: fixed;
+    inset: 0;
+    background: transparent;
+    z-index: 10;
+}
+
+.tag-filter-popover {
+    position: absolute;
+    z-index: 11;
+    min-width: 200px;
+    max-height: 300px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #d0d0d0;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 0.75rem;
+}
+
+.tag-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.tag-list li {
+    padding: 0.25rem 0;
+}
+
+.tag-list label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.empty-state {
+    margin: 0 0 0.75rem;
+    color: #666;
+}
+
+.popover-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #eee;
+}

@@ -5,6 +5,7 @@ using Moq;
 using Shelvd.Web.Client.Models;
 using Shelvd.Web.Client.Pages;
 using Shelvd.Web.Client.Services.Books;
+using Shelvd.Web.Client.Services.Tags;
 using Shelvd.Web.Shared.Common;
 
 namespace Shelvd.Web.Tests.Pages;
@@ -12,10 +13,15 @@ namespace Shelvd.Web.Tests.Pages;
 public class LibraryTests : BunitContext
 {
     private readonly Mock<IBooksApiClient> _booksApiClient = new();
+    private readonly Mock<ITagsApiClient> _tagsApiClient = new();
 
     public LibraryTests()
     {
         Services.AddSingleton(_booksApiClient.Object);
+        Services.AddSingleton(_tagsApiClient.Object);
+        _tagsApiClient
+            .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([]));
     }
 
     [Fact]
@@ -192,6 +198,65 @@ public class LibraryTests : BunitContext
 
         var titles = cut.FindAll(".book-title").Select(e => e.TextContent).ToList();
         Assert.Equal(["Apple Book", "Mango Book", "Zebra Book"], titles);
+    }
+
+    [Fact]
+    public void Library_FetchesTags_OnInit()
+    {
+        var books = new List<BookDto>
+        {
+            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, [])
+        };
+        _booksApiClient
+            .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
+
+        Render<Library>();
+
+        _tagsApiClient.Verify(c => c.GetTagsAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void Library_TagIconButton_OpensPopover()
+    {
+        var books = new List<BookDto>
+        {
+            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, [])
+        };
+        _booksApiClient
+            .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
+        _tagsApiClient
+            .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success(
+                [new TagDto(Guid.NewGuid(), "Fantasy", false)]));
+
+        var cut = Render<Library>();
+        Assert.Empty(cut.FindAll(".tag-filter-popover"));
+
+        cut.Find(".tag-filter-button").Click();
+
+        Assert.NotEmpty(cut.FindAll(".tag-filter-popover"));
+        Assert.Contains("Fantasy", cut.Markup);
+    }
+
+    [Fact]
+    public void Library_TagsLoadFailure_DoesNotBlockBookRendering()
+    {
+        var books = new List<BookDto>
+        {
+            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, [])
+        };
+        _booksApiClient
+            .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
+        _tagsApiClient
+            .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Failure(TagsApiError.Unknown));
+
+        var cut = Render<Library>();
+
+        Assert.Contains("Test Book", cut.Markup);
     }
 
     [Fact]

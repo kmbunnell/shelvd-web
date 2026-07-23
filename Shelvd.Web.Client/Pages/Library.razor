@@ -4,9 +4,12 @@
 @implements IDisposable
 @using Microsoft.AspNetCore.Authorization
 @using Shelvd.Web.Shared.Common
+@using Shelvd.Web.Client.Components
 @using Shelvd.Web.Client.Models
 @using Shelvd.Web.Client.Services.Books
+@using Shelvd.Web.Client.Services.Tags
 @inject IBooksApiClient BooksApiClient
+@inject ITagsApiClient TagsApiClient
 
 <PageTitle>Library</PageTitle>
 
@@ -38,6 +41,16 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
                 <option value="@SortOption.Title">Title (A&ndash;Z)</option>
                 <option value="@SortOption.Author">Author (A&ndash;Z)</option>
             </select>
+            <button type="button" class="tag-filter-button" @onclick="ToggleTagPopover" aria-haspopup="dialog">
+                <span aria-hidden="true">&#127991;</span>
+                <span class="visually-hidden">Filter by tag</span>
+            </button>
+            <TagFilterPopover
+                IsOpen="_isTagPopoverOpen"
+                Tags="AvailableTags"
+                SelectedTagIds="_selectedTagIds"
+                OnDone="HandleTagFilterDone"
+                OnDismiss="HandleTagFilterDismiss" />
         </div>
         <ul class="book-grid">
             @foreach (var book in SortBooks(success.Value))
@@ -60,8 +73,12 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
     private const string PlaceholderCoverUrl = "/images/placeholder-cover.webp";
 
     private Result<IReadOnlyList<BookDto>, BooksApiError>? _result;
+    private Result<IReadOnlyList<TagDto>, TagsApiError>? _tagsResult;
     private CancellationTokenSource? _cts;
+    private CancellationTokenSource? _tagsCts;
     private SortOption _sortOption = SortOption.Title;
+    private bool _isTagPopoverOpen;
+    private IReadOnlyList<Guid> _selectedTagIds = [];
 
     private enum SortOption
     {
@@ -69,7 +86,10 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
         Author
     }
 
-    protected override Task OnInitializedAsync() => LoadBooksAsync();
+    private IReadOnlyList<TagDto> AvailableTags =>
+        _tagsResult is Result<IReadOnlyList<TagDto>, TagsApiError>.Success success ? success.Value : [];
+
+    protected override Task OnInitializedAsync() => Task.WhenAll(LoadBooksAsync(), LoadTagsAsync());
 
     private IEnumerable<BookDto> SortBooks(IReadOnlyList<BookDto> books) => _sortOption switch
     {
@@ -95,9 +115,37 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
         }
     }
 
+    private async Task LoadTagsAsync()
+    {
+        _tagsCts?.Cancel();
+        _tagsCts?.Dispose();
+        _tagsCts = new CancellationTokenSource();
+
+        try
+        {
+            _tagsResult = await TagsApiClient.GetTagsAsync(_tagsCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // The component was disposed before the fetch completed — nothing to render.
+        }
+    }
+
+    private void ToggleTagPopover() => _isTagPopoverOpen = !_isTagPopoverOpen;
+
+    private void HandleTagFilterDone(IReadOnlyList<Guid> selectedTagIds)
+    {
+        _selectedTagIds = selectedTagIds;
+        _isTagPopoverOpen = false;
+    }
+
+    private void HandleTagFilterDismiss() => _isTagPopoverOpen = false;
+
     public void Dispose()
     {
         _cts?.Cancel();
         _cts?.Dispose();
+        _tagsCts?.Cancel();
+        _tagsCts?.Dispose();
     }
 }
