@@ -33,7 +33,7 @@ public class LibraryTests : BunitContext
     {
         var books = new List<BookDto>
         {
-            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One", "Author Two"], null, DateTimeOffset.UtcNow)
+            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One", "Author Two"], null, DateTimeOffset.UtcNow, [])
         };
         _booksApiClient
             .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
@@ -63,7 +63,7 @@ public class LibraryTests : BunitContext
     {
         var books = new List<BookDto>
         {
-            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow)
+            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, [])
         };
         _booksApiClient
             .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
@@ -80,7 +80,7 @@ public class LibraryTests : BunitContext
     {
         var books = new List<BookDto>
         {
-            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow)
+            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, [])
         };
         _booksApiClient
             .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
@@ -97,7 +97,7 @@ public class LibraryTests : BunitContext
     {
         var books = new List<BookDto>
         {
-            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], "https://example.com/cover.jpg", DateTimeOffset.UtcNow)
+            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], "https://example.com/cover.jpg", DateTimeOffset.UtcNow, [])
         };
         _booksApiClient
             .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
@@ -138,7 +138,7 @@ public class LibraryTests : BunitContext
     {
         var books = new List<BookDto>
         {
-            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow)
+            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, [])
         };
         _booksApiClient
             .SetupSequence(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
