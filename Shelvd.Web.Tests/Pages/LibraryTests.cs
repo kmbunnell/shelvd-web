@@ -47,6 +47,69 @@ public class LibraryTests : BunitContext
     }
 
     [Fact]
+    public void Library_LoadingIndicator_HasStatusRoleAndAccessibleLabel()
+    {
+        var tcs = new TaskCompletionSource<Result<IReadOnlyList<BookDto>, BooksApiError>>();
+        _booksApiClient.Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>())).Returns(tcs.Task);
+
+        var cut = Render<Library>();
+
+        var status = cut.Find("[role='status']");
+        Assert.Contains("Loading your books", status.TextContent);
+    }
+
+    [Fact]
+    public void Library_RendersBookCards_InGridContainer()
+    {
+        var books = new List<BookDto>
+        {
+            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow)
+        };
+        _booksApiClient
+            .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
+
+        var cut = Render<Library>();
+
+        Assert.Contains("class=\"book-grid\"", cut.Markup);
+        Assert.Contains("class=\"book-card\"", cut.Markup);
+    }
+
+    [Fact]
+    public void Library_ShowsPlaceholderCover_WhenCoverImageUrlIsNull()
+    {
+        var books = new List<BookDto>
+        {
+            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow)
+        };
+        _booksApiClient
+            .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
+
+        var cut = Render<Library>();
+
+        var img = cut.Find("img");
+        Assert.Equal("/images/placeholder-cover.webp", img.GetAttribute("src"));
+    }
+
+    [Fact]
+    public void Library_ShowsActualCover_WhenCoverImageUrlIsPresent()
+    {
+        var books = new List<BookDto>
+        {
+            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], "https://example.com/cover.jpg", DateTimeOffset.UtcNow)
+        };
+        _booksApiClient
+            .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
+
+        var cut = Render<Library>();
+
+        var img = cut.Find("img");
+        Assert.Equal("https://example.com/cover.jpg", img.GetAttribute("src"));
+    }
+
+    [Fact]
     public void Library_RendersEmptyStateMessage_WhenFetchResolvesWithEmptyList()
     {
         _booksApiClient
