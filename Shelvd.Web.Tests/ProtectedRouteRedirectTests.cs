@@ -21,7 +21,7 @@ public class ProtectedRouteRedirectTests : IClassFixture<WebApplicationFactory<P
     {
         var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        var response = await client.GetAsync("/library");
+        var response = await client.GetAsync("/");
 
         Assert.True(
             response.StatusCode is HttpStatusCode.Redirect or HttpStatusCode.Found or HttpStatusCode.SeeOther,
@@ -29,6 +29,6 @@ public class ProtectedRouteRedirectTests : IClassFixture<WebApplicationFactory<P
         var location = response.Headers.Location!;
         Assert.Equal("/login", location.AbsolutePath);
         Assert.Contains("returnUrl=", location.Query);
-        Assert.Contains(Uri.EscapeDataString("/library"), location.Query);
+        Assert.Contains(Uri.EscapeDataString("/"), location.Query);
     }
 }
