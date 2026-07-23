@@ -1,0 +1,64 @@
+@using Shelvd.Web.Client.Models
+
+@if (IsOpen)
+{
+    <div class="popover-backdrop" @onclick="Dismiss"></div>
+    <div class="tag-filter-popover" role="dialog" aria-label="Filter by tag">
+        @if (Tags.Count == 0)
+        {
+            <p class="empty-state">No tags yet.</p>
+        }
+        else
+        {
+            <ul class="tag-list">
+                @foreach (var tag in Tags.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    <li>
+                        <label>
+                            <input type="checkbox" checked="@_pendingSelection.Contains(tag.Id)" @onchange="@(() => ToggleTag(tag.Id))" />
+                            @tag.Name
+                        </label>
+                    </li>
+                }
+            </ul>
+        }
+        <div class="popover-actions">
+            <button type="button" class="clear-all-button" @onclick="ClearAll">Clear all</button>
+            <button type="button" class="done-button" @onclick="Done">Done</button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public IReadOnlyList<TagDto> Tags { get; set; } = [];
+    [Parameter] public IReadOnlyList<Guid> SelectedTagIds { get; set; } = [];
+    [Parameter] public EventCallback<IReadOnlyList<Guid>> OnDone { get; set; }
+    [Parameter] public EventCallback OnDismiss { get; set; }
+
+    private HashSet<Guid> _pendingSelection = [];
+    private bool _wasOpen;
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen && !_wasOpen)
+        {
+            _pendingSelection = [.. SelectedTagIds];
+        }
+        _wasOpen = IsOpen;
+    }
+
+    private void ToggleTag(Guid tagId)
+    {
+        if (!_pendingSelection.Add(tagId))
+        {
+            _pendingSelection.Remove(tagId);
+        }
+    }
+
+    private void ClearAll() => _pendingSelection.Clear();
+
+    private Task Done() => OnDone.InvokeAsync([.. _pendingSelection]);
+
+    private Task Dismiss() => OnDismiss.InvokeAsync();
+}
