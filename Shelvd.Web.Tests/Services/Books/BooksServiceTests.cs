@@ -97,6 +97,78 @@ public class BooksServiceTests
     }
 
     [Fact]
+    public async Task GetBooksAsync_RequestsBookTagsEmbed()
+    {
+        HttpRequestMessage? capturedRequest = null;
+        var factory = CreateHttpClientFactory(HttpStatusCode.OK, Array.Empty<object>(), request => capturedRequest = request);
+        var sut = new BooksService(factory.Object, _logger);
+
+        await sut.GetBooksAsync("access-token");
+
+        Assert.NotNull(capturedRequest);
+        Assert.Contains("book_tags", Uri.UnescapeDataString(capturedRequest!.RequestUri!.Query));
+    }
+
+    [Fact]
+    public async Task GetBooksAsync_MapsEmbeddedBookTags_ToBookDtoTags()
+    {
+        var responseBooks = new[]
+        {
+            new
+            {
+                id = "11111111-1111-1111-1111-111111111111",
+                isbn = "9780000000000",
+                title = "Test Book",
+                authors = new[] { "Author One" },
+                cover_image_url = (string?)null,
+                created_at = "2024-01-01T00:00:00Z",
+                book_tags = new[]
+                {
+                    new { tags = new { id = "22222222-2222-2222-2222-222222222222", name = "Fantasy", is_default = false } },
+                    new { tags = new { id = "33333333-3333-3333-3333-333333333333", name = "Favorites", is_default = true } }
+                }
+            }
+        };
+        var factory = CreateHttpClientFactory(HttpStatusCode.OK, responseBooks);
+        var sut = new BooksService(factory.Object, _logger);
+
+        var result = await sut.GetBooksAsync("access-token");
+
+        var success = Assert.IsType<Result<IReadOnlyList<BookDto>, BooksError>.Success>(result);
+        var book = Assert.Single(success.Value);
+        Assert.Equal(2, book.Tags.Count);
+        Assert.Contains(book.Tags, t => t.Name == "Fantasy" && !t.IsDefault);
+        Assert.Contains(book.Tags, t => t.Name == "Favorites" && t.IsDefault);
+    }
+
+    [Fact]
+    public async Task GetBooksAsync_MapsBookWithNoTags_ToEmptyTagsList()
+    {
+        var responseBooks = new[]
+        {
+            new
+            {
+                id = "11111111-1111-1111-1111-111111111111",
+                isbn = "9780000000000",
+                title = "Test Book",
+                authors = new[] { "Author One" },
+                cover_image_url = (string?)null,
+                created_at = "2024-01-01T00:00:00Z",
+                book_tags = Array.Empty<object>()
+            }
+        };
+        var factory = CreateHttpClientFactory(HttpStatusCode.OK, responseBooks);
+        var sut = new BooksService(factory.Object, _logger);
+
+        var result = await sut.GetBooksAsync("access-token");
+
+        var success = Assert.IsType<Result<IReadOnlyList<BookDto>, BooksError>.Success>(result);
+        var book = Assert.Single(success.Value);
+        Assert.NotNull(book.Tags);
+        Assert.Empty(book.Tags);
+    }
+
+    [Fact]
     public async Task GetBooksAsync_ReturnsEmptyList_WhenResponseIsEmptyArray()
     {
         var factory = CreateHttpClientFactory(HttpStatusCode.OK, Array.Empty<object>());

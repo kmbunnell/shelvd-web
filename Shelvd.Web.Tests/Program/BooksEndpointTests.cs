@@ -45,7 +45,7 @@ public class BooksEndpointTests : IClassFixture<WebApplicationFactory<Program>>
     {
         var books = new List<BookDto>
         {
-            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow)
+            new(Guid.NewGuid(), "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, [])
         };
         var booksService = new StubBooksService(new Result<IReadOnlyList<BookDto>, BooksError>.Success(books));
         var client = WithBooksService(booksService).CreateClient();
