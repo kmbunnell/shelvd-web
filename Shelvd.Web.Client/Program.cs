@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Shelvd.Web.Client.Services.Auth;
 using Shelvd.Web.Client.Services.Books;
+using Shelvd.Web.Client.Services.Tags;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 
@@ -10,6 +11,7 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, PersistentAuthenticationStateProvider>();
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 builder.Services.AddScoped<IBooksApiClient, BooksApiClient>();
+builder.Services.AddScoped<ITagsApiClient, TagsApiClient>();
 
 var host = builder.Build();
 
