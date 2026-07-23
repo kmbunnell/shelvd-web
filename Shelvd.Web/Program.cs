@@ -7,6 +7,7 @@ using Shelvd.Web.Components;
 using Shelvd.Web.Middleware;
 using Shelvd.Web.Services.Auth;
 using Shelvd.Web.Services.Books;
+using Shelvd.Web.Services.Tags;
 using Shelvd.Web.Shared.Common;
 using Supabase.Gotrue;
 using Supabase.Gotrue.Interfaces;
@@ -93,6 +94,7 @@ builder.Services.AddScoped<IAuthService, ServerAuthService>();
 builder.Services.AddScoped<IAuthCookieService, HttpContextAuthCookieService>();
 builder.Services.AddScoped<IAccessTokenRefreshService, AccessTokenRefreshService>();
 builder.Services.AddScoped<IBooksService, BooksService>();
+builder.Services.AddScoped<ITagsService, TagsService>();
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, PersistingAuthenticationStateProvider>();
@@ -190,6 +192,28 @@ app.MapGet("/api/books", async (HttpContext httpContext, IBooksService booksServ
         Result<IReadOnlyList<BookDto>, BooksError>.Failure failure => failure.Error switch
         {
             BooksError.Unauthenticated => Results.Unauthorized(),
+            _ => Results.StatusCode(StatusCodes.Status502BadGateway)
+        },
+        _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+    };
+})
+.RequireAuthorization();
+
+app.MapGet("/api/tags", async (HttpContext httpContext, ITagsService tagsService) =>
+{
+    var accessToken = httpContext.User.FindFirst(AuthClaimTypes.AccessToken)?.Value;
+    if (accessToken is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var result = await tagsService.GetTagsAsync(accessToken);
+    return result switch
+    {
+        Result<IReadOnlyList<TagDto>, TagsError>.Success success => Results.Ok(success.Value),
+        Result<IReadOnlyList<TagDto>, TagsError>.Failure failure => failure.Error switch
+        {
+            TagsError.Unauthenticated => Results.Unauthorized(),
             _ => Results.StatusCode(StatusCodes.Status502BadGateway)
         },
         _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
