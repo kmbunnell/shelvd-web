@@ -1,3 +1,4 @@
+using System.Linq;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -152,6 +153,45 @@ public class LibraryTests : BunitContext
 
         Assert.Contains("Test Book", cut.Markup);
         _booksApiClient.Verify(c => c.GetBooksAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public void Library_DefaultRendersBooks_SortedByTitleAscending()
+    {
+        var books = new List<BookDto>
+        {
+            new(Guid.NewGuid(), "9780000000001", "Zebra Book", ["Author One"], null, DateTimeOffset.UtcNow, []),
+            new(Guid.NewGuid(), "9780000000002", "Apple Book", ["Author Two"], null, DateTimeOffset.UtcNow, []),
+            new(Guid.NewGuid(), "9780000000003", "Mango Book", ["Author Three"], null, DateTimeOffset.UtcNow, [])
+        };
+        _booksApiClient
+            .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
+
+        var cut = Render<Library>();
+
+        var titles = cut.FindAll(".book-title").Select(e => e.TextContent).ToList();
+        Assert.Equal(["Apple Book", "Mango Book", "Zebra Book"], titles);
+    }
+
+    [Fact]
+    public void Library_SwitchingSortToAuthor_ReSortsByFirstAuthorAscending()
+    {
+        var books = new List<BookDto>
+        {
+            new(Guid.NewGuid(), "9780000000001", "Zebra Book", ["Zed Author"], null, DateTimeOffset.UtcNow, []),
+            new(Guid.NewGuid(), "9780000000002", "Apple Book", ["Amy Author"], null, DateTimeOffset.UtcNow, []),
+            new(Guid.NewGuid(), "9780000000003", "Mango Book", ["Mia Author"], null, DateTimeOffset.UtcNow, [])
+        };
+        _booksApiClient
+            .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
+
+        var cut = Render<Library>();
+        cut.Find("#sort-select").Change("Author");
+
+        var titles = cut.FindAll(".book-title").Select(e => e.TextContent).ToList();
+        Assert.Equal(["Apple Book", "Mango Book", "Zebra Book"], titles);
     }
 
     [Fact]

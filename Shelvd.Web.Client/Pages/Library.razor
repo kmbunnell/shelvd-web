@@ -32,8 +32,15 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
     }
     else
     {
+        <div class="toolbar">
+            <label for="sort-select">Sort by</label>
+            <select id="sort-select" @bind="_sortOption">
+                <option value="@SortOption.Title">Title (A&ndash;Z)</option>
+                <option value="@SortOption.Author">Author (A&ndash;Z)</option>
+            </select>
+        </div>
         <ul class="book-grid">
-            @foreach (var book in success.Value)
+            @foreach (var book in SortBooks(success.Value))
             {
                 <li class="book-card" @key="book.Id">
                     <div class="book-cover">
@@ -54,8 +61,21 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
 
     private Result<IReadOnlyList<BookDto>, BooksApiError>? _result;
     private CancellationTokenSource? _cts;
+    private SortOption _sortOption = SortOption.Title;
+
+    private enum SortOption
+    {
+        Title,
+        Author
+    }
 
     protected override Task OnInitializedAsync() => LoadBooksAsync();
+
+    private IEnumerable<BookDto> SortBooks(IReadOnlyList<BookDto> books) => _sortOption switch
+    {
+        SortOption.Author => books.OrderBy(book => book.Authors.Count > 0 ? book.Authors[0] : string.Empty, StringComparer.OrdinalIgnoreCase),
+        _ => books.OrderBy(book => book.Title, StringComparer.OrdinalIgnoreCase)
+    };
 
     private async Task LoadBooksAsync()
     {
