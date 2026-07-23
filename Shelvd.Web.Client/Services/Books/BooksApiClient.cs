@@ -5,7 +5,7 @@ using Shelvd.Web.Shared.Common;
 
 namespace Shelvd.Web.Client.Services.Books;
 
-public sealed class BooksApiClient(HttpClient httpClient) : IBooksApiClient
+public sealed class BooksApiClient(HttpClient httpClient, ILogger<BooksApiClient> logger) : IBooksApiClient
 {
     public async Task<Result<IReadOnlyList<BookDto>, BooksApiError>> GetBooksAsync(CancellationToken cancellationToken = default)
     {
@@ -30,12 +30,14 @@ public sealed class BooksApiClient(HttpClient httpClient) : IBooksApiClient
         {
             throw;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            logger.LogWarning(ex, "Network error while fetching books.");
             return new Result<IReadOnlyList<BookDto>, BooksApiError>.Failure(BooksApiError.NetworkError);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            logger.LogError(ex, "Unexpected error while fetching books.");
             return new Result<IReadOnlyList<BookDto>, BooksApiError>.Failure(BooksApiError.Unknown);
         }
     }
