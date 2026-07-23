@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Moq.Protected;
 using Shelvd.Web.Client.Services.Books;
@@ -9,6 +10,8 @@ namespace Shelvd.Web.Tests.Services.Books;
 
 public class BooksApiClientTests
 {
+    private static readonly NullLogger<BooksApiClient> _logger = NullLogger<BooksApiClient>.Instance;
+
     private static HttpClient CreateHttpClient(
         HttpStatusCode statusCode,
         object? content,
@@ -43,7 +46,7 @@ public class BooksApiClientTests
     {
         HttpRequestMessage? capturedRequest = null;
         var httpClient = CreateHttpClient(HttpStatusCode.OK, Array.Empty<object>(), request => capturedRequest = request);
-        var sut = new BooksApiClient(httpClient);
+        var sut = new BooksApiClient(httpClient, _logger);
 
         await sut.GetBooksAsync();
 
@@ -68,7 +71,7 @@ public class BooksApiClientTests
             }
         };
         var httpClient = CreateHttpClient(HttpStatusCode.OK, responseBooks);
-        var sut = new BooksApiClient(httpClient);
+        var sut = new BooksApiClient(httpClient, _logger);
 
         var result = await sut.GetBooksAsync();
 
@@ -81,7 +84,7 @@ public class BooksApiClientTests
     public async Task GetBooksAsync_ReturnsFailure_WhenResponseIsNotSuccessStatusCode()
     {
         var httpClient = CreateHttpClient(HttpStatusCode.Unauthorized, content: null);
-        var sut = new BooksApiClient(httpClient);
+        var sut = new BooksApiClient(httpClient, _logger);
 
         var result = await sut.GetBooksAsync();
 
@@ -92,7 +95,7 @@ public class BooksApiClientTests
     public async Task GetBooksAsync_ReturnsFailure_WhenHttpCallThrows()
     {
         var httpClient = CreateThrowingHttpClient(new HttpRequestException("network unreachable"));
-        var sut = new BooksApiClient(httpClient);
+        var sut = new BooksApiClient(httpClient, _logger);
 
         var result = await sut.GetBooksAsync();
 
@@ -104,7 +107,7 @@ public class BooksApiClientTests
     public async Task GetBooksAsync_ThrowsOperationCanceled_WhenTokenIsAlreadyCancelled()
     {
         var httpClient = CreateThrowingHttpClient(new OperationCanceledException());
-        var sut = new BooksApiClient(httpClient);
+        var sut = new BooksApiClient(httpClient, _logger);
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
