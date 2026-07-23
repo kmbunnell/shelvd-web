@@ -87,7 +87,7 @@ public class AccessTokenRefreshMiddlewareTests : IClassFixture<WebApplicationFac
         var staleAccessToken = CreateAccessToken(DateTime.UtcNow.AddSeconds(10));
         var cookie = await MintCookieAsync(factory, staleAccessToken, "refresh-token");
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = false });
-        var request = new HttpRequestMessage(HttpMethod.Get, "/counter");
+        var request = new HttpRequestMessage(HttpMethod.Get, "/library");
         request.Headers.Add("Cookie", cookie);
 
         var response = await client.SendAsync(request);
@@ -103,7 +103,7 @@ public class AccessTokenRefreshMiddlewareTests : IClassFixture<WebApplicationFac
         var staleAccessToken = CreateAccessToken(DateTime.UtcNow.AddSeconds(10));
         var cookie = await MintCookieAsync(factory, staleAccessToken, "refresh-token");
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = false });
-        var request = new HttpRequestMessage(HttpMethod.Get, "/counter");
+        var request = new HttpRequestMessage(HttpMethod.Get, "/library");
         request.Headers.Add("Cookie", cookie);
 
         var response = await client.SendAsync(request);
@@ -126,7 +126,7 @@ public class AccessTokenRefreshMiddlewareTests : IClassFixture<WebApplicationFac
         var freshAccessToken = CreateAccessToken(DateTime.UtcNow.AddMinutes(30));
         var cookie = await MintCookieAsync(factory, freshAccessToken, "refresh-token");
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = false });
-        var request = new HttpRequestMessage(HttpMethod.Get, "/counter");
+        var request = new HttpRequestMessage(HttpMethod.Get, "/library");
         request.Headers.Add("Cookie", cookie);
 
         var response = await client.SendAsync(request);
