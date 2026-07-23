@@ -53,7 +53,7 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
                 OnDismiss="HandleTagFilterDismiss" />
         </div>
         <ul class="book-grid">
-            @foreach (var book in SortBooks(success.Value))
+            @foreach (var book in FilterBooks(SortBooks(success.Value)))
             {
                 <li class="book-card" @key="book.Id">
                     <div class="book-cover">
@@ -96,6 +96,11 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
         SortOption.Author => books.OrderBy(book => book.Authors.Count > 0 ? book.Authors[0] : string.Empty, StringComparer.OrdinalIgnoreCase),
         _ => books.OrderBy(book => book.Title, StringComparer.OrdinalIgnoreCase)
     };
+
+    private IEnumerable<BookDto> FilterBooks(IEnumerable<BookDto> books) =>
+        _selectedTagIds.Count == 0
+            ? books
+            : books.Where(book => _selectedTagIds.All(tagId => book.Tags.Any(tag => tag.Id == tagId)));
 
     private async Task LoadBooksAsync()
     {
