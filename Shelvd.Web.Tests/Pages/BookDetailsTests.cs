@@ -1,0 +1,186 @@
+using Bunit;
+using Bunit.TestDoubles;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using Shelvd.Web.Client.Models;
+using Shelvd.Web.Client.Pages;
+using Shelvd.Web.Client.Services.Books;
+using Shelvd.Web.Client.Services.Tags;
+using Shelvd.Web.Shared.Common;
+
+namespace Shelvd.Web.Tests.Pages;
+
+public class BookDetailsTests : BunitContext
+{
+    private readonly Mock<IBooksApiClient> _booksApiClient = new();
+    private readonly Mock<ITagsApiClient> _tagsApiClient = new();
+    private readonly Guid _bookId = Guid.NewGuid();
+
+    public BookDetailsTests()
+    {
+        Services.AddSingleton(_booksApiClient.Object);
+        Services.AddSingleton(_tagsApiClient.Object);
+        _tagsApiClient
+            .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([]));
+    }
+
+    private IRenderedComponent<BookDetails> RenderBookDetails() =>
+        Render<BookDetails>(parameters => parameters.Add(p => p.Id, _bookId));
+
+    [Fact]
+    public void BookDetails_ShowsLoadingIndicator_BeforeFetchCompletes()
+    {
+        var tcs = new TaskCompletionSource<Result<BookDto, BooksApiError>>();
+        _booksApiClient.Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>())).Returns(tcs.Task);
+
+        var cut = RenderBookDetails();
+
+        Assert.Contains("Loading", cut.Markup, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BookDetails_RendersTitleAndCover_WhenFetchResolvesWithData()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], "https://example.com/cover.jpg", DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+
+        var cut = RenderBookDetails();
+
+        var heading = cut.Find("h1");
+        Assert.Equal("Tag Book", heading.TextContent);
+        var img = cut.Find("img");
+        Assert.Equal("https://example.com/cover.jpg", img.GetAttribute("src"));
+        Assert.Equal("Cover of Test Book", img.GetAttribute("alt"));
+    }
+
+    [Fact]
+    public void BookDetails_ShowsPlaceholderCover_WhenCoverImageUrlIsNull()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+
+        var cut = RenderBookDetails();
+
+        var img = cut.Find("img");
+        Assert.Equal("/images/placeholder-cover.webp", img.GetAttribute("src"));
+    }
+
+    [Fact]
+    public void BookDetails_RendersOneTagElementPerAvailableTag_WithTaggedOnesHighlighted()
+    {
+        var fantasyTag = new TagDto(Guid.NewGuid(), "Fantasy", false);
+        var favoritesTag = new TagDto(Guid.NewGuid(), "Favorites", true);
+        var mysteryTag = new TagDto(Guid.NewGuid(), "Mystery", false);
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, [fantasyTag]);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+        _tagsApiClient
+            .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasyTag, favoritesTag, mysteryTag]));
+
+        var cut = RenderBookDetails();
+
+        var tagElements = cut.FindAll(".tag-chip");
+        Assert.Equal(3, tagElements.Count);
+        Assert.Contains(tagElements, e => e.TextContent == "Fantasy" && e.ClassList.Contains("tag-chip-selected"));
+        Assert.Contains(tagElements, e => e.TextContent == "Favorites" && !e.ClassList.Contains("tag-chip-selected"));
+        Assert.Contains(tagElements, e => e.TextContent == "Mystery" && !e.ClassList.Contains("tag-chip-selected"));
+    }
+
+    [Fact]
+    public void BookDetails_RendersManageTagsButton_WithNoClickHandler()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+
+        var cut = RenderBookDetails();
+
+        var button = cut.Find("button.manage-tags-button");
+        Assert.Equal("Manage Tags", button.TextContent);
+        Assert.DoesNotContain("blazor:onclick", button.OuterHtml);
+    }
+
+    [Fact]
+    public void BookDetails_RendersNotFoundMessage_WhenBookIsNotFound()
+    {
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Failure(BooksApiError.NotFound));
+
+        var cut = RenderBookDetails();
+
+        Assert.Contains("not found", cut.Markup, StringComparison.OrdinalIgnoreCase);
+        var link = cut.Find("a.back-home-link");
+        Assert.Equal("/", link.GetAttribute("href"));
+    }
+
+    [Fact]
+    public void BookDetails_RendersErrorMessage_WhenFetchResolvesWithOtherFailure()
+    {
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Failure(BooksApiError.Unknown));
+
+        var cut = RenderBookDetails();
+
+        Assert.Contains("error", cut.Markup, StringComparison.OrdinalIgnoreCase);
+        cut.Find("button.retry-button");
+    }
+
+    [Fact]
+    public void BookDetails_RetryButton_RefetchesAndRendersSuccess_AfterFailure()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .SetupSequence(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Failure(BooksApiError.Unknown))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+
+        var cut = RenderBookDetails();
+        Assert.Contains("error", cut.Markup, StringComparison.OrdinalIgnoreCase);
+
+        cut.Find("button.retry-button").Click();
+
+        Assert.Contains("Test Book", cut.Markup);
+        _booksApiClient.Verify(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public void BookDetails_BackButton_NavigatesToRoot()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+        var navigation = Services.GetRequiredService<BunitNavigationManager>();
+        navigation.NavigateTo("books/other-path");
+
+        var cut = RenderBookDetails();
+        cut.Find("a.back-button").Click();
+
+        Assert.Equal(navigation.BaseUri, navigation.Uri);
+    }
+
+    [Fact]
+    public void BookDetails_RendersDeleteButton_WithNoClickHandler()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+
+        var cut = RenderBookDetails();
+
+        var button = cut.Find("button.delete-button");
+        Assert.Equal("Delete book from library", button.GetAttribute("aria-label"));
+        Assert.DoesNotContain("blazor:onclick", button.OuterHtml);
+    }
+}

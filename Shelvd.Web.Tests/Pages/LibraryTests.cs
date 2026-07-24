@@ -119,6 +119,24 @@ public class LibraryTests : BunitContext
     }
 
     [Fact]
+    public void Library_BookCard_LinksToBookDetailsRoute()
+    {
+        var bookId = Guid.NewGuid();
+        var books = new List<BookDto>
+        {
+            new(bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, [])
+        };
+        _booksApiClient
+            .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
+
+        var cut = Render<Library>();
+
+        var link = cut.Find(".book-card a");
+        Assert.Equal($"/books/{bookId}", link.GetAttribute("href"));
+    }
+
+    [Fact]
     public void Library_RendersEmptyStateMessage_WhenFetchResolvesWithEmptyList()
     {
         _booksApiClient

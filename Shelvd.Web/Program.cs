@@ -199,6 +199,29 @@ app.MapGet("/api/books", async (HttpContext httpContext, IBooksService booksServ
 })
 .RequireAuthorization();
 
+app.MapGet("/api/books/{id:guid}", async (HttpContext httpContext, IBooksService booksService, Guid id) =>
+{
+    var accessToken = httpContext.User.FindFirst(AuthClaimTypes.AccessToken)?.Value;
+    if (accessToken is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var result = await booksService.GetBookByIdAsync(accessToken, id);
+    return result switch
+    {
+        Result<BookDto?, BooksError>.Success { Value: null } => Results.NotFound(),
+        Result<BookDto?, BooksError>.Success success => Results.Ok(success.Value),
+        Result<BookDto?, BooksError>.Failure failure => failure.Error switch
+        {
+            BooksError.Unauthenticated => Results.Unauthorized(),
+            _ => Results.StatusCode(StatusCodes.Status502BadGateway)
+        },
+        _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+    };
+})
+.RequireAuthorization();
+
 app.MapGet("/api/tags", async (HttpContext httpContext, ITagsService tagsService) =>
 {
     var accessToken = httpContext.User.FindFirst(AuthClaimTypes.AccessToken)?.Value;

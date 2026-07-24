@@ -1,0 +1,124 @@
+@page "/books/{Id:guid}"
+@attribute [Authorize]
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@implements IDisposable
+@using Microsoft.AspNetCore.Authorization
+@using Shelvd.Web.Shared.Common
+@using Shelvd.Web.Client.Models
+@using Shelvd.Web.Client.Services.Books
+@using Shelvd.Web.Client.Services.Tags
+@inject IBooksApiClient BooksApiClient
+@inject ITagsApiClient TagsApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>Tag Book</PageTitle>
+
+@if (_result is null)
+{
+    <div class="loading-container" role="status">
+        <div class="spinner" aria-hidden="true"></div>
+        <span class="visually-hidden">Loading book...</span>
+    </div>
+}
+else if (_result is Result<BookDto, BooksApiError>.Failure failure)
+{
+    if (failure.Error == BooksApiError.NotFound)
+    {
+        <p>Book not found.</p>
+        <a class="back-home-link" href="/">Back to Library</a>
+    }
+    else
+    {
+        <p role="alert">An error occurred while loading this book. Please try again later.</p>
+        <button class="retry-button" @onclick="LoadBookAsync">Retry</button>
+    }
+}
+else if (_result is Result<BookDto, BooksApiError>.Success success)
+{
+    var book = success.Value;
+    <div class="page-header">
+        <a class="back-button" href="#" @onclick="NavigateBack" @onclick:preventDefault aria-label="Back to Library">
+            <span aria-hidden="true">&#8592;</span>
+        </a>
+        <h1>Tag Book</h1>
+        <button type="button" class="delete-button" aria-label="Delete book from library">
+            <span aria-hidden="true">&#128465;</span>
+        </button>
+    </div>
+    <div class="book-cover">
+        <img src="@(book.CoverImageUrl ?? BookCoverDefaults.PlaceholderCoverUrl)" alt="Cover of @book.Title" />
+    </div>
+    <ul class="tag-grid">
+        @foreach (var tag in AvailableTags)
+        {
+            <li class="tag-chip @(IsTagged(book, tag) ? "tag-chip-selected" : "")" @key="tag.Id">@tag.Name</li>
+        }
+    </ul>
+    <button type="button" class="manage-tags-button">Manage Tags</button>
+}
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private Result<BookDto, BooksApiError>? _result;
+    private Result<IReadOnlyList<TagDto>, TagsApiError>? _tagsResult;
+    private CancellationTokenSource? _cts;
+    private CancellationTokenSource? _tagsCts;
+
+    private IReadOnlyList<TagDto> AvailableTags =>
+        _tagsResult is Result<IReadOnlyList<TagDto>, TagsApiError>.Success success ? success.Value : [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _ = LoadTagsAsync();
+        await LoadBookAsync();
+    }
+
+    private static bool IsTagged(BookDto book, TagDto tag) => book.Tags.Any(t => t.Id == tag.Id);
+
+    private void NavigateBack() => Navigation.NavigateTo("/");
+
+    private async Task LoadBookAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+
+        _result = null;
+        try
+        {
+            _result = await BooksApiClient.GetBookAsync(Id, _cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a subsequent LoadBookAsync call (retry) or the component
+            // was disposed before the fetch completed — either way, nothing to render.
+        }
+    }
+
+    private async Task LoadTagsAsync()
+    {
+        _tagsCts?.Cancel();
+        _tagsCts?.Dispose();
+        _tagsCts = new CancellationTokenSource();
+
+        try
+        {
+            _tagsResult = await TagsApiClient.GetTagsAsync(_tagsCts.Token);
+            StateHasChanged();
+        }
+        catch (OperationCanceledException)
+        {
+            // The component was disposed before the fetch completed — nothing to render.
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _tagsCts?.Cancel();
+        _tagsCts?.Dispose();
+    }
+}
