@@ -36,21 +36,31 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
     else
     {
         <div class="toolbar">
-            <label for="sort-select">Sort by</label>
+             <div class="tag-filter-wrapper">
+                <button type="button" class="tag-filter-button" @ref="_tagFilterButtonRef" @onclick="ToggleTagPopover" aria-haspopup="dialog">
+                    <span aria-hidden="true">&#127991;</span>
+                    <span class="visually-hidden">
+                        @(_selectedTagIds.Count > 0 ? $"Filter by tag, {_selectedTagIds.Count} selected" : "Filter by tag")
+                    </span>
+                    @if (_selectedTagIds.Count > 0)
+                    {
+                        <span class="tag-filter-count" aria-hidden="true">@_selectedTagIds.Count</span>
+                    }
+                </button>
+                <TagFilterPopover
+                    IsOpen="_isTagPopoverOpen"
+                    Status="TagsStatus"
+                    Tags="AvailableTags"
+                    SelectedTagIds="_selectedTagIds"
+                    OnDone="HandleTagFilterDone"
+                    OnDismiss="HandleTagFilterDismiss"
+                    OnRetry="LoadTagsAsync" />
+            </div>
+             <label for="sort-select" class="visually-hidden">Sort by</label>
             <select id="sort-select" @bind="_sortOption">
                 <option value="@SortOption.Title">Title (A&ndash;Z)</option>
                 <option value="@SortOption.Author">Author (A&ndash;Z)</option>
             </select>
-            <button type="button" class="tag-filter-button" @onclick="ToggleTagPopover" aria-haspopup="dialog">
-                <span aria-hidden="true">&#127991;</span>
-                <span class="visually-hidden">Filter by tag</span>
-            </button>
-            <TagFilterPopover
-                IsOpen="_isTagPopoverOpen"
-                Tags="AvailableTags"
-                SelectedTagIds="_selectedTagIds"
-                OnDone="HandleTagFilterDone"
-                OnDismiss="HandleTagFilterDismiss" />
         </div>
         <ul class="book-grid">
             @foreach (var book in FilterBooks(SortBooks(success.Value)))
@@ -79,6 +89,7 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
     private SortOption _sortOption = SortOption.Title;
     private bool _isTagPopoverOpen;
     private IReadOnlyList<Guid> _selectedTagIds = [];
+    private ElementReference _tagFilterButtonRef;
 
     private enum SortOption
     {
@@ -89,7 +100,18 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
     private IReadOnlyList<TagDto> AvailableTags =>
         _tagsResult is Result<IReadOnlyList<TagDto>, TagsApiError>.Success success ? success.Value : [];
 
-    protected override Task OnInitializedAsync() => Task.WhenAll(LoadBooksAsync(), LoadTagsAsync());
+    private TagFilterPopover.TagsLoadStatus TagsStatus => _tagsResult switch
+    {
+        null => TagFilterPopover.TagsLoadStatus.Loading,
+        Result<IReadOnlyList<TagDto>, TagsApiError>.Success => TagFilterPopover.TagsLoadStatus.Loaded,
+        _ => TagFilterPopover.TagsLoadStatus.Failed
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _ = LoadTagsAsync();
+        await LoadBooksAsync();
+    }
 
     private IEnumerable<BookDto> SortBooks(IReadOnlyList<BookDto> books) => _sortOption switch
     {
@@ -129,6 +151,7 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
         try
         {
             _tagsResult = await TagsApiClient.GetTagsAsync(_tagsCts.Token);
+            StateHasChanged();
         }
         catch (OperationCanceledException)
         {
@@ -138,13 +161,18 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
 
     private void ToggleTagPopover() => _isTagPopoverOpen = !_isTagPopoverOpen;
 
-    private void HandleTagFilterDone(IReadOnlyList<Guid> selectedTagIds)
+    private async Task HandleTagFilterDone(IReadOnlyList<Guid> selectedTagIds)
     {
         _selectedTagIds = selectedTagIds;
         _isTagPopoverOpen = false;
+        await _tagFilterButtonRef.FocusAsync();
     }
 
-    private void HandleTagFilterDismiss() => _isTagPopoverOpen = false;
+    private async Task HandleTagFilterDismiss()
+    {
+        _isTagPopoverOpen = false;
+        await _tagFilterButtonRef.FocusAsync();
+    }
 
     public void Dispose()
     {

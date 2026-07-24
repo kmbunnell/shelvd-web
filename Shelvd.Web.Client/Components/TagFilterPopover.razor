@@ -1,51 +1,94 @@
 @using Shelvd.Web.Client.Models
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
 
 @if (IsOpen)
 {
     <div class="popover-backdrop" @onclick="Dismiss"></div>
-    <div class="tag-filter-popover" role="dialog" aria-label="Filter by tag">
-        @if (Tags.Count == 0)
-        {
-            <p class="empty-state">No tags yet.</p>
-        }
-        else
-        {
-            <ul class="tag-list">
-                @foreach (var tag in Tags.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
-                {
-                    <li>
-                        <label>
-                            <input type="checkbox" checked="@_pendingSelection.Contains(tag.Id)" @onchange="@(() => ToggleTag(tag.Id))" />
-                            @tag.Name
-                        </label>
-                    </li>
-                }
-            </ul>
-        }
+    <div class="tag-filter-popover" role="dialog" aria-modal="true" aria-label="Filter by tag" tabindex="-1" @ref="_dialogRef" @onkeydown="HandleKeyDown">
+        <div class="popover-content">
+            @if (Status == TagsLoadStatus.Loading)
+            {
+                <p class="loading-state">Loading tags&hellip;</p>
+            }
+            else if (Status == TagsLoadStatus.Failed)
+            {
+                <p class="error-state" role="alert">Couldn't load tags.</p>
+                <button type="button" class="retry-button" @onclick="Retry">Retry</button>
+            }
+            else
+            {
+                <ul class="tag-list">
+                    @foreach (var tag in Tags.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
+                    {
+                        <li>
+                            <label>
+                                <input type="checkbox" checked="@_pendingSelection.Contains(tag.Id)" @onchange="@(() => ToggleTag(tag.Id))" />
+                                @tag.Name
+                            </label>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
         <div class="popover-actions">
-            <button type="button" class="clear-all-button" @onclick="ClearAll">Clear all</button>
-            <button type="button" class="done-button" @onclick="Done">Done</button>
+            <button type="button" class="clear-all-button" disabled="@(Status != TagsLoadStatus.Loaded)" @onclick="ClearAll">Clear all</button>
+            <button type="button" class="done-button" disabled="@(Status != TagsLoadStatus.Loaded)" @onclick="Done">Done</button>
         </div>
     </div>
 }
 
 @code {
+    public enum TagsLoadStatus
+    {
+        Loading,
+        Loaded,
+        Failed
+    }
+
     [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public TagsLoadStatus Status { get; set; }
     [Parameter] public IReadOnlyList<TagDto> Tags { get; set; } = [];
     [Parameter] public IReadOnlyList<Guid> SelectedTagIds { get; set; } = [];
     [Parameter] public EventCallback<IReadOnlyList<Guid>> OnDone { get; set; }
     [Parameter] public EventCallback OnDismiss { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
 
     private HashSet<Guid> _pendingSelection = [];
     private bool _wasOpen;
+    private bool _shouldFocusDialog;
+    private ElementReference _dialogRef;
+    private IJSObjectReference? _module;
 
     protected override void OnParametersSet()
     {
         if (IsOpen && !_wasOpen)
         {
             _pendingSelection = [.. SelectedTagIds];
+            _shouldFocusDialog = true;
         }
         _wasOpen = IsOpen;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shouldFocusDialog)
+        {
+            _shouldFocusDialog = false;
+            await _dialogRef.FocusAsync();
+
+            _module ??= await JSRuntime.InvokeAsync<IJSObjectReference>(
+                "import", "./Components/TagFilterPopover.razor.js");
+            await _module.InvokeVoidAsync("trapFocus", _dialogRef);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            await _module.DisposeAsync();
+        }
     }
 
     private void ToggleTag(Guid tagId)
@@ -61,4 +104,8 @@
     private Task Done() => OnDone.InvokeAsync([.. _pendingSelection]);
 
     private Task Dismiss() => OnDismiss.InvokeAsync();
+
+    private Task Retry() => OnRetry.InvokeAsync();
+
+    private Task HandleKeyDown(KeyboardEventArgs e) => e.Key == "Escape" ? Dismiss() : Task.CompletedTask;
 }
