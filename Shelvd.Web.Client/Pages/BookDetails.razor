@@ -8,7 +8,7 @@
 @using Shelvd.Web.Client.Services.Books
 @using Shelvd.Web.Client.Services.Tags
 @inject IBooksApiClient BooksApiClient
-@inject ITagsApiClient TagsApiClient
+@inject ITagsCache TagsCache
 @inject NavigationManager Navigation
 
 <PageTitle>Tag Book</PageTitle>
@@ -51,12 +51,20 @@
                 </button>
             </div>
         </div>
-        <ul class="tag-grid">
-            @foreach (var tag in AvailableTags)
-            {
-                <li class="tag-chip @(IsTagged(book, tag) ? "tag-chip-selected" : "")" @key="tag.Id">@tag.Name</li>
-            }
-        </ul>
+        @if (_tagsLoader?.Result is Result<IReadOnlyList<TagDto>, TagsApiError>.Failure)
+        {
+            <p class="error-state" role="alert">Couldn't load tags.</p>
+            <button type="button" class="retry-button" @onclick="ReloadTagsAsync">Retry</button>
+        }
+        else
+        {
+            <ul class="tag-grid">
+                @foreach (var tag in AvailableTags)
+                {
+                    <li class="tag-chip @(IsTagged(book, tag) ? "tag-chip-selected" : "")" @key="tag.Id">@tag.Name</li>
+                }
+            </ul>
+        }
         <button type="button" class="manage-tags-button">Manage Tags</button>
     }
 </div>
@@ -66,18 +74,24 @@
     public Guid Id { get; set; }
 
     private Result<BookDto, BooksApiError>? _result;
-    private Result<IReadOnlyList<TagDto>, TagsApiError>? _tagsResult;
+    private TagsLoader? _tagsLoader;
     private CancellationTokenSource? _cts;
-    private CancellationTokenSource? _tagsCts;
+    private Guid? _loadedId;
 
     private IReadOnlyList<TagDto> AvailableTags =>
-        _tagsResult is Result<IReadOnlyList<TagDto>, TagsApiError>.Success success ? success.Value : [];
+        _tagsLoader?.Result is Result<IReadOnlyList<TagDto>, TagsApiError>.Success success ? success.Value : [];
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        _ = LoadTagsAsync();
+        if (_loadedId == Id) return;
+        _loadedId = Id;
+
+        _tagsLoader ??= new TagsLoader(TagsCache);
+        _ = ReloadTagsAsync();
         await LoadBookAsync();
     }
+
+    private Task ReloadTagsAsync() => _tagsLoader!.LoadAsync(StateHasChanged);
 
     private static bool IsTagged(BookDto book, TagDto tag) => book.Tags.Any(t => t.Id == tag.Id);
 
@@ -101,28 +115,10 @@
         }
     }
 
-    private async Task LoadTagsAsync()
-    {
-        _tagsCts?.Cancel();
-        _tagsCts?.Dispose();
-        _tagsCts = new CancellationTokenSource();
-
-        try
-        {
-            _tagsResult = await TagsApiClient.GetTagsAsync(_tagsCts.Token);
-            StateHasChanged();
-        }
-        catch (OperationCanceledException)
-        {
-            // The component was disposed before the fetch completed — nothing to render.
-        }
-    }
-
     public void Dispose()
     {
         _cts?.Cancel();
         _cts?.Dispose();
-        _tagsCts?.Cancel();
-        _tagsCts?.Dispose();
+        _tagsLoader?.Dispose();
     }
 }

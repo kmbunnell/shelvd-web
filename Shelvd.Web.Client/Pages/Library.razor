@@ -9,7 +9,7 @@
 @using Shelvd.Web.Client.Services.Books
 @using Shelvd.Web.Client.Services.Tags
 @inject IBooksApiClient BooksApiClient
-@inject ITagsApiClient TagsApiClient
+@inject ITagsCache TagsCache
 
 <PageTitle>Library</PageTitle>
 
@@ -55,7 +55,7 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
                     OnSelectionChanged="HandleTagFilterSelectionChanged"
                     OnDone="HandleTagFilterDone"
                     OnDismiss="HandleTagFilterDismiss"
-                    OnRetry="LoadTagsAsync" />
+                    OnRetry="ReloadTagsAsync" />
             </div>
              <label for="sort-select" class="visually-hidden">Sort by</label>
             <select id="sort-select" @bind="_sortOption">
@@ -84,9 +84,8 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
 
 @code {
     private Result<IReadOnlyList<BookDto>, BooksApiError>? _result;
-    private Result<IReadOnlyList<TagDto>, TagsApiError>? _tagsResult;
+    private TagsLoader? _tagsLoader;
     private CancellationTokenSource? _cts;
-    private CancellationTokenSource? _tagsCts;
     private SortOption _sortOption = SortOption.Title;
     private bool _isTagPopoverOpen;
     private IReadOnlyList<Guid> _selectedTagIds = [];
@@ -99,9 +98,9 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
     }
 
     private IReadOnlyList<TagDto> AvailableTags =>
-        _tagsResult is Result<IReadOnlyList<TagDto>, TagsApiError>.Success success ? success.Value : [];
+        _tagsLoader?.Result is Result<IReadOnlyList<TagDto>, TagsApiError>.Success success ? success.Value : [];
 
-    private TagFilterPopover.TagsLoadStatus TagsStatus => _tagsResult switch
+    private TagFilterPopover.TagsLoadStatus TagsStatus => _tagsLoader?.Result switch
     {
         null => TagFilterPopover.TagsLoadStatus.Loading,
         Result<IReadOnlyList<TagDto>, TagsApiError>.Success => TagFilterPopover.TagsLoadStatus.Loaded,
@@ -110,9 +109,12 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
 
     protected override async Task OnInitializedAsync()
     {
-        _ = LoadTagsAsync();
+        _tagsLoader = new TagsLoader(TagsCache);
+        _ = ReloadTagsAsync();
         await LoadBooksAsync();
     }
+
+    private Task ReloadTagsAsync() => _tagsLoader!.LoadAsync(StateHasChanged);
 
     private IEnumerable<BookDto> SortBooks(IReadOnlyList<BookDto> books) => _sortOption switch
     {
@@ -143,23 +145,6 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
         }
     }
 
-    private async Task LoadTagsAsync()
-    {
-        _tagsCts?.Cancel();
-        _tagsCts?.Dispose();
-        _tagsCts = new CancellationTokenSource();
-
-        try
-        {
-            _tagsResult = await TagsApiClient.GetTagsAsync(_tagsCts.Token);
-            StateHasChanged();
-        }
-        catch (OperationCanceledException)
-        {
-            // The component was disposed before the fetch completed — nothing to render.
-        }
-    }
-
     private void ToggleTagPopover() => _isTagPopoverOpen = !_isTagPopoverOpen;
 
     private void HandleTagFilterSelectionChanged(IReadOnlyList<Guid> selectedTagIds) =>
@@ -181,7 +166,6 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
     {
         _cts?.Cancel();
         _cts?.Dispose();
-        _tagsCts?.Cancel();
-        _tagsCts?.Dispose();
+        _tagsLoader?.Dispose();
     }
 }

@@ -13,13 +13,13 @@ namespace Shelvd.Web.Tests.Pages;
 public class LibraryTests : BunitContext
 {
     private readonly Mock<IBooksApiClient> _booksApiClient = new();
-    private readonly Mock<ITagsApiClient> _tagsApiClient = new();
+    private readonly Mock<ITagsCache> _tagsCache = new();
 
     public LibraryTests()
     {
         Services.AddSingleton(_booksApiClient.Object);
-        Services.AddSingleton(_tagsApiClient.Object);
-        _tagsApiClient
+        Services.AddSingleton(_tagsCache.Object);
+        _tagsCache
             .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([]));
         JSInterop.SetupModule("./Components/TagFilterPopover.razor.js")
@@ -233,7 +233,7 @@ public class LibraryTests : BunitContext
 
         Render<Library>();
 
-        _tagsApiClient.Verify(c => c.GetTagsAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _tagsCache.Verify(c => c.GetTagsAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -246,7 +246,7 @@ public class LibraryTests : BunitContext
         _booksApiClient
             .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
-        _tagsApiClient
+        _tagsCache
             .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success(
                 [new TagDto(Guid.NewGuid(), "Fantasy", false)]));
@@ -270,7 +270,7 @@ public class LibraryTests : BunitContext
         _booksApiClient
             .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
-        _tagsApiClient
+        _tagsCache
             .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Failure(TagsApiError.Unknown));
 
@@ -294,7 +294,7 @@ public class LibraryTests : BunitContext
         _booksApiClient
             .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
-        _tagsApiClient
+        _tagsCache
             .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasy, favorites, scifi]));
 
@@ -320,7 +320,7 @@ public class LibraryTests : BunitContext
         _booksApiClient
             .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
-        _tagsApiClient
+        _tagsCache
             .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasy]));
 
@@ -344,7 +344,7 @@ public class LibraryTests : BunitContext
         _booksApiClient
             .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
-        _tagsApiClient
+        _tagsCache
             .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasy]));
 
@@ -371,7 +371,7 @@ public class LibraryTests : BunitContext
         _booksApiClient
             .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
-        _tagsApiClient
+        _tagsCache
             .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasy]));
 
@@ -402,7 +402,7 @@ public class LibraryTests : BunitContext
         _booksApiClient
             .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
-        _tagsApiClient
+        _tagsCache
             .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasy]));
 
