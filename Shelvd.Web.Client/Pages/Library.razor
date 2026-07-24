@@ -67,13 +67,15 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
             @foreach (var book in FilterBooks(SortBooks(success.Value)))
             {
                 <li class="book-card" @key="book.Id">
-                    <div class="book-cover">
-                        <img src="@(book.CoverImageUrl ?? PlaceholderCoverUrl)" alt="Cover of @book.Title" />
-                    </div>
-                    <div class="book-info">
-                        <span class="book-title">@book.Title</span>
-                        <span class="book-authors">@string.Join(", ", book.Authors)</span>
-                    </div>
+                    <a href="@($"/books/{book.Id}")">
+                        <div class="book-cover">
+                            <img src="@(book.CoverImageUrl ?? BookCoverDefaults.PlaceholderCoverUrl)" alt="Cover of @book.Title" />
+                        </div>
+                        <div class="book-info">
+                            <span class="book-title">@book.Title</span>
+                            <span class="book-authors">@string.Join(", ", book.Authors)</span>
+                        </div>
+                    </a>
                 </li>
             }
         </ul>
@@ -81,8 +83,6 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
 }
 
 @code {
-    private const string PlaceholderCoverUrl = "/images/placeholder-cover.webp";
-
     private Result<IReadOnlyList<BookDto>, BooksApiError>? _result;
     private Result<IReadOnlyList<TagDto>, TagsApiError>? _tagsResult;
     private CancellationTokenSource? _cts;

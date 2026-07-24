@@ -113,4 +113,90 @@ public class BooksApiClientTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.GetBooksAsync(cts.Token));
     }
+
+    [Fact]
+    public async Task GetBookAsync_RequestsApiBooksById()
+    {
+        var id = Guid.NewGuid();
+        HttpRequestMessage? capturedRequest = null;
+        var httpClient = CreateHttpClient(HttpStatusCode.OK, new
+        {
+            id = id.ToString(),
+            isbn = "9780000000000",
+            title = "Test Book",
+            authors = new[] { "Author One" },
+            cover_image_url = (string?)null,
+            created_at = "2024-01-01T00:00:00Z",
+            tags = Array.Empty<object>()
+        }, request => capturedRequest = request);
+        var sut = new BooksApiClient(httpClient, _logger);
+
+        await sut.GetBookAsync(id);
+
+        Assert.NotNull(capturedRequest);
+        Assert.Equal(HttpMethod.Get, capturedRequest!.Method);
+        Assert.Equal($"/api/books/{id}", capturedRequest.RequestUri!.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task GetBookAsync_ReturnsParsedBook_WhenResponseIsSuccessful()
+    {
+        var id = Guid.NewGuid();
+        var responseBook = new
+        {
+            id = id.ToString(),
+            isbn = "9780000000000",
+            title = "Test Book",
+            authors = new[] { "Author One" },
+            cover_image_url = (string?)null,
+            created_at = "2024-01-01T00:00:00Z",
+            tags = Array.Empty<object>()
+        };
+        var httpClient = CreateHttpClient(HttpStatusCode.OK, responseBook);
+        var sut = new BooksApiClient(httpClient, _logger);
+
+        var result = await sut.GetBookAsync(id);
+
+        var success = Assert.IsType<Result<Shelvd.Web.Client.Models.BookDto, BooksApiError>.Success>(result);
+        Assert.Equal("Test Book", success.Value.Title);
+    }
+
+    [Fact]
+    public async Task GetBookAsync_ReturnsFailureNotFound_WhenResponseIs404()
+    {
+        var id = Guid.NewGuid();
+        var httpClient = CreateHttpClient(HttpStatusCode.NotFound, content: null);
+        var sut = new BooksApiClient(httpClient, _logger);
+
+        var result = await sut.GetBookAsync(id);
+
+        var failure = Assert.IsType<Result<Shelvd.Web.Client.Models.BookDto, BooksApiError>.Failure>(result);
+        Assert.Equal(BooksApiError.NotFound, failure.Error);
+    }
+
+    [Fact]
+    public async Task GetBookAsync_ReturnsFailureUnauthenticated_WhenResponseIs401()
+    {
+        var id = Guid.NewGuid();
+        var httpClient = CreateHttpClient(HttpStatusCode.Unauthorized, content: null);
+        var sut = new BooksApiClient(httpClient, _logger);
+
+        var result = await sut.GetBookAsync(id);
+
+        var failure = Assert.IsType<Result<Shelvd.Web.Client.Models.BookDto, BooksApiError>.Failure>(result);
+        Assert.Equal(BooksApiError.Unauthenticated, failure.Error);
+    }
+
+    [Fact]
+    public async Task GetBookAsync_ReturnsFailureNetworkError_WhenHttpCallThrows()
+    {
+        var id = Guid.NewGuid();
+        var httpClient = CreateThrowingHttpClient(new HttpRequestException("network unreachable"));
+        var sut = new BooksApiClient(httpClient, _logger);
+
+        var result = await sut.GetBookAsync(id);
+
+        var failure = Assert.IsType<Result<Shelvd.Web.Client.Models.BookDto, BooksApiError>.Failure>(result);
+        Assert.Equal(BooksApiError.NetworkError, failure.Error);
+    }
 }

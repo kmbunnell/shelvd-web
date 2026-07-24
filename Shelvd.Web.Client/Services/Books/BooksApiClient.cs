@@ -41,4 +41,41 @@ public sealed class BooksApiClient(HttpClient httpClient, ILogger<BooksApiClient
             return new Result<IReadOnlyList<BookDto>, BooksApiError>.Failure(BooksApiError.Unknown);
         }
     }
+
+    public async Task<Result<BookDto, BooksApiError>> GetBookAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response = await httpClient.GetAsync($"api/books/{id}", cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new Result<BookDto, BooksApiError>.Failure(response.StatusCode switch
+                {
+                    HttpStatusCode.Unauthorized => BooksApiError.Unauthenticated,
+                    HttpStatusCode.NotFound => BooksApiError.NotFound,
+                    _ => BooksApiError.Unknown
+                });
+            }
+
+            var book = await response.Content.ReadFromJsonAsync<BookDto>(cancellationToken);
+            return book is null
+                ? new Result<BookDto, BooksApiError>.Failure(BooksApiError.Unknown)
+                : new Result<BookDto, BooksApiError>.Success(book);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Network error while fetching book {BookId}.", id);
+            return new Result<BookDto, BooksApiError>.Failure(BooksApiError.NetworkError);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected error while fetching book {BookId}.", id);
+            return new Result<BookDto, BooksApiError>.Failure(BooksApiError.Unknown);
+        }
+    }
 }

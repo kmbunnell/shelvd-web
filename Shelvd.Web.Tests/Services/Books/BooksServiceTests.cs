@@ -202,4 +202,117 @@ public class BooksServiceTests
         var failure = Assert.IsType<Result<IReadOnlyList<BookDto>, BooksError>.Failure>(result);
         Assert.Equal(BooksError.NetworkError, failure.Error);
     }
+
+    [Fact]
+    public async Task GetBookByIdAsync_RequestsBookByIdFilterWithBearerToken()
+    {
+        var id = Guid.NewGuid();
+        HttpRequestMessage? capturedRequest = null;
+        var factory = CreateHttpClientFactory(HttpStatusCode.OK, Array.Empty<object>(), request => capturedRequest = request);
+        var sut = new BooksService(factory.Object, _logger);
+
+        await sut.GetBookByIdAsync("access-token", id);
+
+        Assert.NotNull(capturedRequest);
+        Assert.Equal(HttpMethod.Get, capturedRequest!.Method);
+        Assert.Equal("/rest/v1/books", capturedRequest.RequestUri!.AbsolutePath);
+        Assert.Contains($"id=eq.{id}", Uri.UnescapeDataString(capturedRequest.RequestUri.Query));
+        Assert.Equal("Bearer", capturedRequest.Headers.Authorization?.Scheme);
+        Assert.Equal("access-token", capturedRequest.Headers.Authorization?.Parameter);
+    }
+
+    [Fact]
+    public async Task GetBookByIdAsync_ReturnsMappedBook_WhenResponseIsSuccessful()
+    {
+        var id = Guid.NewGuid();
+        var responseBooks = new[]
+        {
+            new
+            {
+                id = id.ToString(),
+                isbn = "9780000000000",
+                title = "Test Book",
+                authors = new[] { "Author One" },
+                cover_image_url = "https://example.com/cover.jpg",
+                created_at = "2024-01-01T00:00:00Z",
+                book_tags = new[]
+                {
+                    new { tags = new { id = "22222222-2222-2222-2222-222222222222", name = "Fantasy", is_default = false } }
+                }
+            }
+        };
+        var factory = CreateHttpClientFactory(HttpStatusCode.OK, responseBooks);
+        var sut = new BooksService(factory.Object, _logger);
+
+        var result = await sut.GetBookByIdAsync("access-token", id);
+
+        var success = Assert.IsType<Result<BookDto?, BooksError>.Success>(result);
+        Assert.NotNull(success.Value);
+        Assert.Equal(id, success.Value!.Id);
+        Assert.Equal("Test Book", success.Value.Title);
+        Assert.Single(success.Value.Tags);
+    }
+
+    [Fact]
+    public async Task GetBookByIdAsync_ReturnsSuccessWithNull_WhenResponseIsEmptyArray()
+    {
+        var id = Guid.NewGuid();
+        var factory = CreateHttpClientFactory(HttpStatusCode.OK, Array.Empty<object>());
+        var sut = new BooksService(factory.Object, _logger);
+
+        var result = await sut.GetBookByIdAsync("access-token", id);
+
+        var success = Assert.IsType<Result<BookDto?, BooksError>.Success>(result);
+        Assert.Null(success.Value);
+    }
+
+    [Fact]
+    public async Task GetBookByIdAsync_ReturnsFailure_WhenUnauthorized()
+    {
+        var id = Guid.NewGuid();
+        var factory = CreateHttpClientFactory(HttpStatusCode.Unauthorized, content: null);
+        var sut = new BooksService(factory.Object, _logger);
+
+        var result = await sut.GetBookByIdAsync("access-token", id);
+
+        var failure = Assert.IsType<Result<BookDto?, BooksError>.Failure>(result);
+        Assert.Equal(BooksError.Unauthenticated, failure.Error);
+    }
+
+    [Fact]
+    public async Task GetBookByIdAsync_ReturnsFailure_WhenHttpCallThrows()
+    {
+        var id = Guid.NewGuid();
+        var factory = CreateThrowingHttpClientFactory(new HttpRequestException("network unreachable"));
+        var sut = new BooksService(factory.Object, _logger);
+
+        var result = await sut.GetBookByIdAsync("access-token", id);
+
+        var failure = Assert.IsType<Result<BookDto?, BooksError>.Failure>(result);
+        Assert.Equal(BooksError.NetworkError, failure.Error);
+    }
+
+    [Fact]
+    public async Task GetBookByIdAsync_ReturnsFailure_WhenResponseIsMalformed()
+    {
+        var id = Guid.NewGuid();
+        var handler = new Mock<HttpMessageHandler>();
+        handler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create<object?>(null)
+            });
+        var factory = new Mock<IHttpClientFactory>();
+        factory
+            .Setup(f => f.CreateClient(BooksService.SupabaseRestHttpClientName))
+            .Returns(new HttpClient(handler.Object) { BaseAddress = new Uri("https://test.supabase.co/rest/v1/") });
+        var sut = new BooksService(factory.Object, _logger);
+
+        var result = await sut.GetBookByIdAsync("access-token", id);
+
+        var failure = Assert.IsType<Result<BookDto?, BooksError>.Failure>(result);
+        Assert.Equal(BooksError.MalformedResponse, failure.Error);
+    }
 }

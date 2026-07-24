@@ -81,10 +81,67 @@ public class BooksEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
     }
 
-    private sealed class StubBooksService(Result<IReadOnlyList<BookDto>, BooksError> result) : IBooksService
+    [Fact]
+    public async Task GetBookById_ReturnsOkWithBook_WhenAuthenticatedAndServiceSucceeds()
+    {
+        var id = Guid.NewGuid();
+        var book = new BookDto(id, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        var booksService = new StubBooksService(byIdResult: new Result<BookDto?, BooksError>.Success(book));
+        var client = WithBooksService(booksService).CreateClient();
+
+        var response = await client.GetAsync($"/api/books/{id}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<BookDto>();
+        Assert.NotNull(body);
+        Assert.Equal("Test Book", body!.Title);
+    }
+
+    [Fact]
+    public async Task GetBookById_ReturnsNotFound_WhenServiceReturnsNull()
+    {
+        var id = Guid.NewGuid();
+        var booksService = new StubBooksService(byIdResult: new Result<BookDto?, BooksError>.Success(null));
+        var client = WithBooksService(booksService).CreateClient();
+
+        var response = await client.GetAsync($"/api/books/{id}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetBookById_ReturnsUnauthorized_WhenNotAuthenticated()
+    {
+        var id = Guid.NewGuid();
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.GetAsync($"/api/books/{id}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetBookById_ReturnsNonSuccessStatus_WhenServiceFails()
+    {
+        var id = Guid.NewGuid();
+        var booksService = new StubBooksService(byIdResult: new Result<BookDto?, BooksError>.Failure(BooksError.Unknown));
+        var client = WithBooksService(booksService).CreateClient();
+
+        var response = await client.GetAsync($"/api/books/{id}");
+
+        Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotEqual(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    private sealed class StubBooksService(
+        Result<IReadOnlyList<BookDto>, BooksError>? result = null,
+        Result<BookDto?, BooksError>? byIdResult = null) : IBooksService
     {
         public Task<Result<IReadOnlyList<BookDto>, BooksError>> GetBooksAsync(string accessToken) =>
-            Task.FromResult(result);
+            Task.FromResult(result!);
+
+        public Task<Result<BookDto?, BooksError>> GetBookByIdAsync(string accessToken, Guid id) =>
+            Task.FromResult(byIdResult!);
     }
 
     private sealed class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>

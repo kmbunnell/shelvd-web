@@ -14,21 +14,10 @@ public sealed class BooksService(IHttpClientFactory httpClientFactory, ILogger<B
 
     public async Task<Result<IReadOnlyList<BookDto>, BooksError>> GetBooksAsync(string accessToken)
     {
-        var result = await _restClient.GetListAsync<RawBookDto, BooksError>(
-            SupabaseRestHttpClientName,
-            resourceName: "books",
-            path: "books",
-            query: new Dictionary<string, string?>
-            {
-                ["select"] = "id,isbn,title,authors,cover_image_url,created_at,book_tags(tags(id,name,is_default))",
-                ["order"] = "created_at.desc"
-            },
-            accessToken,
-            logger,
-            mapStatusError: statusCode => statusCode == HttpStatusCode.Unauthorized ? BooksError.Unauthenticated : BooksError.Unknown,
-            malformedResponseError: BooksError.MalformedResponse,
-            networkError: BooksError.NetworkError,
-            unknownError: BooksError.Unknown);
+        var result = await QueryBooksAsync(accessToken, new Dictionary<string, string?>
+        {
+            ["order"] = "created_at.desc"
+        });
 
         return result switch
         {
@@ -38,6 +27,44 @@ public sealed class BooksService(IHttpClientFactory httpClientFactory, ILogger<B
                 new Result<IReadOnlyList<BookDto>, BooksError>.Failure(failure.Error),
             _ => throw new InvalidOperationException("Unreachable Result variant.")
         };
+    }
+
+    public async Task<Result<BookDto?, BooksError>> GetBookByIdAsync(string accessToken, Guid id)
+    {
+        var result = await QueryBooksAsync(accessToken, new Dictionary<string, string?>
+        {
+            ["id"] = $"eq.{id}"
+        });
+
+        return result switch
+        {
+            Result<IReadOnlyList<RawBookDto>, BooksError>.Success success =>
+                new Result<BookDto?, BooksError>.Success(success.Value.Select(MapToBookDto).FirstOrDefault()),
+            Result<IReadOnlyList<RawBookDto>, BooksError>.Failure failure =>
+                new Result<BookDto?, BooksError>.Failure(failure.Error),
+            _ => throw new InvalidOperationException("Unreachable Result variant.")
+        };
+    }
+
+    private Task<Result<IReadOnlyList<RawBookDto>, BooksError>> QueryBooksAsync(
+        string accessToken, IDictionary<string, string?> extraQuery)
+    {
+        var query = new Dictionary<string, string?>(extraQuery)
+        {
+            ["select"] = "id,isbn,title,authors,cover_image_url,created_at,book_tags(tags(id,name,is_default))"
+        };
+
+        return _restClient.GetListAsync<RawBookDto, BooksError>(
+            SupabaseRestHttpClientName,
+            resourceName: "books",
+            path: "books",
+            query,
+            accessToken,
+            logger,
+            mapStatusError: statusCode => statusCode == HttpStatusCode.Unauthorized ? BooksError.Unauthenticated : BooksError.Unknown,
+            malformedResponseError: BooksError.MalformedResponse,
+            networkError: BooksError.NetworkError,
+            unknownError: BooksError.Unknown);
     }
 
     private static BookDto MapToBookDto(RawBookDto raw) => new(
