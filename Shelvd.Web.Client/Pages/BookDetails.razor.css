@@ -1,3 +1,8 @@
+.page-container {
+    max-width: 28rem;
+    margin: 0 auto;
+}
+
 .loading-container {
     display: flex;
     flex-direction: column;
@@ -26,6 +31,7 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    margin-bottom: 1.5rem;
 }
 
 .page-header h1 {
@@ -56,10 +62,12 @@
     width: 2.25rem;
     height: 2.25rem;
     font-size: 1.15rem;
+    color: #dc2626;
     background: none;
     border: none;
     border-radius: 50%;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .delete-button:hover {
@@ -71,10 +79,17 @@
     justify-content: center;
 }
 
+.cover-frame {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
 .book-cover img {
     width: 12rem;
     aspect-ratio: 2 / 3;
     object-fit: cover;
+    display: block;
 }
 
 .tag-grid {

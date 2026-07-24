@@ -13,49 +13,53 @@
 
 <PageTitle>Tag Book</PageTitle>
 
-@if (_result is null)
-{
-    <div class="loading-container" role="status">
-        <div class="spinner" aria-hidden="true"></div>
-        <span class="visually-hidden">Loading book...</span>
-    </div>
-}
-else if (_result is Result<BookDto, BooksApiError>.Failure failure)
-{
-    if (failure.Error == BooksApiError.NotFound)
+<div class="page-header">
+    <a class="back-button" href="#" @onclick="NavigateBack" @onclick:preventDefault aria-label="Back to Library">
+        <span aria-hidden="true">&#8592;</span>
+    </a>
+    <h1>Tag Book</h1>
+</div>
+<div class="page-container">
+    @if (_result is null)
     {
-        <p>Book not found.</p>
-        <a class="back-home-link" href="/">Back to Library</a>
+        <div class="loading-container" role="status">
+            <div class="spinner" aria-hidden="true"></div>
+            <span class="visually-hidden">Loading book...</span>
+        </div>
     }
-    else
+    else if (_result is Result<BookDto, BooksApiError>.Failure failure)
     {
-        <p role="alert">An error occurred while loading this book. Please try again later.</p>
-        <button class="retry-button" @onclick="LoadBookAsync">Retry</button>
-    }
-}
-else if (_result is Result<BookDto, BooksApiError>.Success success)
-{
-    var book = success.Value;
-    <div class="page-header">
-        <a class="back-button" href="#" @onclick="NavigateBack" @onclick:preventDefault aria-label="Back to Library">
-            <span aria-hidden="true">&#8592;</span>
-        </a>
-        <h1>Tag Book</h1>
-        <button type="button" class="delete-button" aria-label="Delete book from library">
-            <span aria-hidden="true">&#128465;</span>
-        </button>
-    </div>
-    <div class="book-cover">
-        <img src="@(book.CoverImageUrl ?? BookCoverDefaults.PlaceholderCoverUrl)" alt="Cover of @book.Title" />
-    </div>
-    <ul class="tag-grid">
-        @foreach (var tag in AvailableTags)
+        if (failure.Error == BooksApiError.NotFound)
         {
-            <li class="tag-chip @(IsTagged(book, tag) ? "tag-chip-selected" : "")" @key="tag.Id">@tag.Name</li>
+            <p>Book not found.</p>
+            <a class="back-home-link" href="/">Back to Library</a>
         }
-    </ul>
-    <button type="button" class="manage-tags-button">Manage Tags</button>
-}
+        else
+        {
+            <p role="alert">An error occurred while loading this book. Please try again later.</p>
+            <button class="retry-button" @onclick="LoadBookAsync">Retry</button>
+        }
+    }
+    else if (_result is Result<BookDto, BooksApiError>.Success success)
+    {
+        var book = success.Value;
+        <div class="book-cover">
+            <div class="cover-frame">
+                <img src="@(book.CoverImageUrl ?? BookCoverDefaults.PlaceholderCoverUrl)" alt="Cover of @book.Title" />
+                <button type="button" class="delete-button" aria-label="Delete book from library">
+                    <span aria-hidden="true">&#128465;&#65038;</span>
+                </button>
+            </div>
+        </div>
+        <ul class="tag-grid">
+            @foreach (var tag in AvailableTags)
+            {
+                <li class="tag-chip @(IsTagged(book, tag) ? "tag-chip-selected" : "")" @key="tag.Id">@tag.Name</li>
+            }
+        </ul>
+        <button type="button" class="manage-tags-button">Manage Tags</button>
+    }
+</div>
 
 @code {
     [Parameter]
