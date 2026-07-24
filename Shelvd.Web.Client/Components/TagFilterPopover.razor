@@ -50,7 +50,8 @@
     [Parameter] public TagsLoadStatus Status { get; set; }
     [Parameter] public IReadOnlyList<TagDto> Tags { get; set; } = [];
     [Parameter] public IReadOnlyList<Guid> SelectedTagIds { get; set; } = [];
-    [Parameter] public EventCallback<IReadOnlyList<Guid>> OnDone { get; set; }
+    [Parameter] public EventCallback<IReadOnlyList<Guid>> OnSelectionChanged { get; set; }
+    [Parameter] public EventCallback OnDone { get; set; }
     [Parameter] public EventCallback OnDismiss { get; set; }
     [Parameter] public EventCallback OnRetry { get; set; }
 
@@ -91,17 +92,22 @@
         }
     }
 
-    private void ToggleTag(Guid tagId)
+    private Task ToggleTag(Guid tagId)
     {
         if (!_pendingSelection.Add(tagId))
         {
             _pendingSelection.Remove(tagId);
         }
+        return OnSelectionChanged.InvokeAsync([.. _pendingSelection]);
     }
 
-    private void ClearAll() => _pendingSelection.Clear();
+    private Task ClearAll()
+    {
+        _pendingSelection.Clear();
+        return OnSelectionChanged.InvokeAsync([.. _pendingSelection]);
+    }
 
-    private Task Done() => OnDone.InvokeAsync([.. _pendingSelection]);
+    private Task Done() => OnDone.InvokeAsync();
 
     private Task Dismiss() => OnDismiss.InvokeAsync();
 

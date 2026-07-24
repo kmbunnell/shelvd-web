@@ -72,7 +72,7 @@ public class TagFilterPopoverTests : BunitContext
     }
 
     [Fact]
-    public void TagFilterPopover_Done_InvokesCallbackWithCurrentSelection()
+    public void TagFilterPopover_TogglingCheckbox_InvokesSelectionChangedImmediately()
     {
         var fantasy = Tag("Fantasy");
         var scifi = Tag("Sci-Fi");
@@ -83,13 +83,50 @@ public class TagFilterPopoverTests : BunitContext
             .Add(p => p.Status, TagFilterPopover.TagsLoadStatus.Loaded)
             .Add(p => p.Tags, [fantasy, scifi])
             .Add(p => p.SelectedTagIds, [])
-            .Add(p => p.OnDone, EventCallback.Factory.Create<IReadOnlyList<Guid>>(this, selection => invokedWith = selection)));
+            .Add(p => p.OnSelectionChanged, EventCallback.Factory.Create<IReadOnlyList<Guid>>(this, selection => invokedWith = selection)));
+
+        cut.FindAll("input[type='checkbox']")[0].Change(true);
+
+        Assert.NotNull(invokedWith);
+        Assert.Equal([fantasy.Id], invokedWith);
+    }
+
+    [Fact]
+    public void TagFilterPopover_ClearAll_InvokesSelectionChangedWithEmptySelection()
+    {
+        var fantasy = Tag("Fantasy");
+        IReadOnlyList<Guid>? invokedWith = null;
+
+        var cut = Render<TagFilterPopover>(parameters => parameters
+            .Add(p => p.IsOpen, true)
+            .Add(p => p.Status, TagFilterPopover.TagsLoadStatus.Loaded)
+            .Add(p => p.Tags, [fantasy])
+            .Add(p => p.SelectedTagIds, [fantasy.Id])
+            .Add(p => p.OnSelectionChanged, EventCallback.Factory.Create<IReadOnlyList<Guid>>(this, selection => invokedWith = selection)));
+
+        cut.Find(".clear-all-button").Click();
+
+        Assert.NotNull(invokedWith);
+        Assert.Empty(invokedWith);
+    }
+
+    [Fact]
+    public void TagFilterPopover_Done_ClosesWithoutSelectionPayload()
+    {
+        var fantasy = Tag("Fantasy");
+        var doneInvoked = false;
+
+        var cut = Render<TagFilterPopover>(parameters => parameters
+            .Add(p => p.IsOpen, true)
+            .Add(p => p.Status, TagFilterPopover.TagsLoadStatus.Loaded)
+            .Add(p => p.Tags, [fantasy])
+            .Add(p => p.SelectedTagIds, [])
+            .Add(p => p.OnDone, EventCallback.Factory.Create(this, () => doneInvoked = true)));
 
         cut.FindAll("input[type='checkbox']")[0].Change(true);
         cut.Find(".done-button").Click();
 
-        Assert.NotNull(invokedWith);
-        Assert.Equal([fantasy.Id], invokedWith);
+        Assert.True(doneInvoked);
     }
 
     [Fact]
