@@ -13,14 +13,14 @@ namespace Shelvd.Web.Tests.Pages;
 public class BookDetailsTests : BunitContext
 {
     private readonly Mock<IBooksApiClient> _booksApiClient = new();
-    private readonly Mock<ITagsApiClient> _tagsApiClient = new();
+    private readonly Mock<ITagsCache> _tagsCache = new();
     private readonly Guid _bookId = Guid.NewGuid();
 
     public BookDetailsTests()
     {
         Services.AddSingleton(_booksApiClient.Object);
-        Services.AddSingleton(_tagsApiClient.Object);
-        _tagsApiClient
+        Services.AddSingleton(_tagsCache.Object);
+        _tagsCache
             .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([]));
     }
@@ -80,7 +80,7 @@ public class BookDetailsTests : BunitContext
         _booksApiClient
             .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
-        _tagsApiClient
+        _tagsCache
             .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasyTag, favoritesTag, mysteryTag]));
 
@@ -91,6 +91,44 @@ public class BookDetailsTests : BunitContext
         Assert.Contains(tagElements, e => e.TextContent == "Fantasy" && e.ClassList.Contains("tag-chip-selected"));
         Assert.Contains(tagElements, e => e.TextContent == "Favorites" && !e.ClassList.Contains("tag-chip-selected"));
         Assert.Contains(tagElements, e => e.TextContent == "Mystery" && !e.ClassList.Contains("tag-chip-selected"));
+    }
+
+    [Fact]
+    public void BookDetails_RendersRetryButton_WhenTagsFailToLoad()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+        _tagsCache
+            .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Failure(TagsApiError.Unknown));
+
+        var cut = RenderBookDetails();
+
+        Assert.Contains("Couldn't load tags", cut.Markup);
+        Assert.Empty(cut.FindAll(".tag-chip"));
+    }
+
+    [Fact]
+    public void BookDetails_RetryButton_RefetchesTags_AfterTagsLoadFailure()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        var fantasyTag = new TagDto(Guid.NewGuid(), "Fantasy", false);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+        _tagsCache
+            .SetupSequence(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Failure(TagsApiError.Unknown))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasyTag]));
+
+        var cut = RenderBookDetails();
+        cut.Find("button.retry-button").Click();
+
+        var tagElements = cut.FindAll(".tag-chip");
+        Assert.Single(tagElements);
+        Assert.Equal("Fantasy", tagElements[0].TextContent);
     }
 
     [Fact]
@@ -105,7 +143,7 @@ public class BookDetailsTests : BunitContext
 
         var button = cut.Find("button.manage-tags-button");
         Assert.Equal("Manage Tags", button.TextContent);
-        Assert.DoesNotContain("blazor:onclick", button.OuterHtml);
+        Assert.Throws<MissingEventHandlerException>(() => button.Click());
     }
 
     [Fact]
@@ -181,6 +219,6 @@ public class BookDetailsTests : BunitContext
 
         var button = cut.Find("button.delete-button");
         Assert.Equal("Delete book from library", button.GetAttribute("aria-label"));
-        Assert.DoesNotContain("blazor:onclick", button.OuterHtml);
+        Assert.Throws<MissingEventHandlerException>(() => button.Click());
     }
 }

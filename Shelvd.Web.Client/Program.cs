@@ -12,6 +12,7 @@ builder.Services.AddScoped<AuthenticationStateProvider, PersistentAuthentication
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 builder.Services.AddScoped<IBooksApiClient, BooksApiClient>();
 builder.Services.AddScoped<ITagsApiClient, TagsApiClient>();
+builder.Services.AddScoped<ITagsCache, TagsCache>();
 
 var host = builder.Build();
 
