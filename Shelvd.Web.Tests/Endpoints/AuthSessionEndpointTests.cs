@@ -1,7 +1,7 @@
 using System.Net;
 using Microsoft.AspNetCore.Mvc.Testing;
 
-namespace Shelvd.Web.Tests;
+namespace Shelvd.Web.Tests.Endpoints;
 
 public class AuthSessionEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {
