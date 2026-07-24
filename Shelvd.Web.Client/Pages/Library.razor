@@ -52,6 +52,7 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
                     Status="TagsStatus"
                     Tags="AvailableTags"
                     SelectedTagIds="_selectedTagIds"
+                    OnSelectionChanged="HandleTagFilterSelectionChanged"
                     OnDone="HandleTagFilterDone"
                     OnDismiss="HandleTagFilterDismiss"
                     OnRetry="LoadTagsAsync" />
@@ -161,9 +162,11 @@ else if (_result is Result<IReadOnlyList<BookDto>, BooksApiError>.Success succes
 
     private void ToggleTagPopover() => _isTagPopoverOpen = !_isTagPopoverOpen;
 
-    private async Task HandleTagFilterDone(IReadOnlyList<Guid> selectedTagIds)
-    {
+    private void HandleTagFilterSelectionChanged(IReadOnlyList<Guid> selectedTagIds) =>
         _selectedTagIds = selectedTagIds;
+
+    private async Task HandleTagFilterDone()
+    {
         _isTagPopoverOpen = false;
         await _tagFilterButtonRef.FocusAsync();
     }

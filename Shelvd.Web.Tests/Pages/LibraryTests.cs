@@ -291,6 +291,57 @@ public class LibraryTests : BunitContext
     }
 
     [Fact]
+    public void Library_TogglingTagCheckbox_FiltersAndUpdatesBadgeBeforeDoneIsClicked()
+    {
+        var fantasy = new TagDto(Guid.NewGuid(), "Fantasy", false);
+        var books = new List<BookDto>
+        {
+            new(Guid.NewGuid(), "9780000000001", "Zebra Book", ["Author One"], null, DateTimeOffset.UtcNow, [fantasy]),
+            new(Guid.NewGuid(), "9780000000002", "Apple Book", ["Author Two"], null, DateTimeOffset.UtcNow, [])
+        };
+        _booksApiClient
+            .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
+        _tagsApiClient
+            .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasy]));
+
+        var cut = Render<Library>();
+        cut.Find(".tag-filter-button").Click();
+        cut.Find("input[type='checkbox']").Change(true);
+
+        Assert.Equal(["Zebra Book"], cut.FindAll(".book-title").Select(e => e.TextContent));
+        Assert.Equal("1", cut.Find(".tag-filter-count").TextContent);
+    }
+
+    [Fact]
+    public void Library_ClickingClearAll_ClearsFilterAndBadgeImmediately()
+    {
+        var fantasy = new TagDto(Guid.NewGuid(), "Fantasy", false);
+        var books = new List<BookDto>
+        {
+            new(Guid.NewGuid(), "9780000000001", "Zebra Book", ["Author One"], null, DateTimeOffset.UtcNow, [fantasy]),
+            new(Guid.NewGuid(), "9780000000002", "Apple Book", ["Author Two"], null, DateTimeOffset.UtcNow, [])
+        };
+        _booksApiClient
+            .Setup(c => c.GetBooksAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<BookDto>, BooksApiError>.Success(books));
+        _tagsApiClient
+            .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasy]));
+
+        var cut = Render<Library>();
+        cut.Find(".tag-filter-button").Click();
+        cut.Find("input[type='checkbox']").Change(true);
+        Assert.Equal(["Zebra Book"], cut.FindAll(".book-title").Select(e => e.TextContent));
+
+        cut.Find(".clear-all-button").Click();
+
+        Assert.Equal(["Apple Book", "Zebra Book"], cut.FindAll(".book-title").Select(e => e.TextContent));
+        Assert.Empty(cut.FindAll(".tag-filter-count"));
+    }
+
+    [Fact]
     public void Library_ClearingSelectedTags_RestoresFullSortedList()
     {
         var fantasy = new TagDto(Guid.NewGuid(), "Fantasy", false);
