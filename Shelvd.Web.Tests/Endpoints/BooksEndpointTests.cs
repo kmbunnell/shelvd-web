@@ -12,7 +12,7 @@ using Shelvd.Web.Services.Auth;
 using Shelvd.Web.Services.Books;
 using Shelvd.Web.Shared.Common;
 
-namespace Shelvd.Web.Tests;
+namespace Shelvd.Web.Tests.Endpoints;
 
 public class BooksEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {

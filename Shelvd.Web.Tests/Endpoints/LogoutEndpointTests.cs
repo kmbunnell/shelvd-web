@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Shelvd.Web.Tests;
+namespace Shelvd.Web.Tests.Endpoints;
 
 public class LogoutEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {

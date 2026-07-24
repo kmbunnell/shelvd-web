@@ -12,7 +12,7 @@ using Shelvd.Web.Services.Auth;
 using Shelvd.Web.Services.Tags;
 using Shelvd.Web.Shared.Common;
 
-namespace Shelvd.Web.Tests;
+namespace Shelvd.Web.Tests.Endpoints;
 
 public class TagsEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {
