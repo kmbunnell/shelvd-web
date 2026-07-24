@@ -7,6 +7,12 @@ namespace Shelvd.Web.Tests.Components;
 
 public class TagFilterPopoverTests : BunitContext
 {
+    public TagFilterPopoverTests()
+    {
+        JSInterop.SetupModule("./Components/TagFilterPopover.razor.js")
+            .SetupVoid("trapFocus", _ => true);
+    }
+
     private static TagDto Tag(string name, bool isDefault = false) => new(Guid.NewGuid(), name, isDefault);
 
     [Fact]
@@ -18,6 +24,7 @@ public class TagFilterPopoverTests : BunitContext
 
         var cut = Render<TagFilterPopover>(parameters => parameters
             .Add(p => p.IsOpen, true)
+            .Add(p => p.Status, TagFilterPopover.TagsLoadStatus.Loaded)
             .Add(p => p.Tags, [zebra, apple, mango])
             .Add(p => p.SelectedTagIds, []));
 
@@ -32,6 +39,7 @@ public class TagFilterPopoverTests : BunitContext
 
         var cut = Render<TagFilterPopover>(parameters => parameters
             .Add(p => p.IsOpen, true)
+            .Add(p => p.Status, TagFilterPopover.TagsLoadStatus.Loaded)
             .Add(p => p.Tags, [tag])
             .Add(p => p.SelectedTagIds, []));
 
@@ -51,6 +59,7 @@ public class TagFilterPopoverTests : BunitContext
 
         var cut = Render<TagFilterPopover>(parameters => parameters
             .Add(p => p.IsOpen, true)
+            .Add(p => p.Status, TagFilterPopover.TagsLoadStatus.Loaded)
             .Add(p => p.Tags, [tag])
             .Add(p => p.SelectedTagIds, [tag.Id]));
 
@@ -71,6 +80,7 @@ public class TagFilterPopoverTests : BunitContext
 
         var cut = Render<TagFilterPopover>(parameters => parameters
             .Add(p => p.IsOpen, true)
+            .Add(p => p.Status, TagFilterPopover.TagsLoadStatus.Loaded)
             .Add(p => p.Tags, [fantasy, scifi])
             .Add(p => p.SelectedTagIds, [])
             .Add(p => p.OnDone, EventCallback.Factory.Create<IReadOnlyList<Guid>>(this, selection => invokedWith = selection)));
@@ -83,14 +93,35 @@ public class TagFilterPopoverTests : BunitContext
     }
 
     [Fact]
-    public void TagFilterPopover_EmptyTagList_RendersEmptyState()
+    public void TagFilterPopover_Loading_RendersLoadingState()
     {
         var cut = Render<TagFilterPopover>(parameters => parameters
             .Add(p => p.IsOpen, true)
+            .Add(p => p.Status, TagFilterPopover.TagsLoadStatus.Loading)
             .Add(p => p.Tags, [])
             .Add(p => p.SelectedTagIds, []));
 
-        Assert.Contains("no tags", cut.Markup, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading", cut.Markup, StringComparison.OrdinalIgnoreCase);
+        Assert.True(cut.Find(".done-button").HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public void TagFilterPopover_Failed_RendersErrorStateWithRetry()
+    {
+        var retried = false;
+
+        var cut = Render<TagFilterPopover>(parameters => parameters
+            .Add(p => p.IsOpen, true)
+            .Add(p => p.Status, TagFilterPopover.TagsLoadStatus.Failed)
+            .Add(p => p.Tags, [])
+            .Add(p => p.SelectedTagIds, [])
+            .Add(p => p.OnRetry, EventCallback.Factory.Create(this, () => retried = true)));
+
+        Assert.Contains("couldn't load tags", cut.Markup, StringComparison.OrdinalIgnoreCase);
+
+        cut.Find(".retry-button").Click();
+
+        Assert.True(retried);
     }
 
     [Fact]

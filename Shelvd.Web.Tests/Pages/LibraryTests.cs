@@ -22,6 +22,8 @@ public class LibraryTests : BunitContext
         _tagsApiClient
             .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([]));
+        JSInterop.SetupModule("./Components/TagFilterPopover.razor.js")
+            .SetupVoid("trapFocus", _ => true);
     }
 
     [Fact]
