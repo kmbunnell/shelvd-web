@@ -103,18 +103,37 @@
     overflow-y: auto;
 }
 
+.tag-chip-item {
+    display: contents;
+}
+
 .tag-chip {
     padding: 0.35rem 0.75rem;
     border-radius: 999px;
     background: none;
     border: 1px solid #e5e7eb;
+    font: inherit;
     font-size: 0.85rem;
+    color: inherit;
+    cursor: pointer;
 }
 
 .tag-chip-selected {
     background: #9ca3af;
     border-color: #9ca3af;
     color: #fff;
+}
+
+.tag-chip-pending {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.tag-chip-error {
+    display: block;
+    width: 100%;
+    font-size: 0.8rem;
+    color: #dc2626;
 }
 
 .visually-hidden {

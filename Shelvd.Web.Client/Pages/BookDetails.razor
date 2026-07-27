@@ -5,10 +5,12 @@
 @using Microsoft.AspNetCore.Authorization
 @using Shelvd.Web.Shared.Common
 @using Shelvd.Web.Client.Models
+@using Shelvd.Web.Client.Services.BookTags
 @using Shelvd.Web.Client.Services.Books
 @using Shelvd.Web.Client.Services.Tags
 @inject IBooksApiClient BooksApiClient
 @inject ITagsCache TagsCache
+@inject IBookTagsApiClient BookTagsApiClient
 @inject NavigationManager Navigation
 
 <PageTitle>Tag Book</PageTitle>
@@ -61,7 +63,13 @@
             <ul class="tag-grid">
                 @foreach (var tag in AvailableTags)
                 {
-                    <li class="tag-chip @(IsTagged(book, tag) ? "tag-chip-selected" : "")" @key="tag.Id">@tag.Name</li>
+                    <li class="tag-chip-item" @key="tag.Id">
+                        <button type="button" class="tag-chip @(IsTagged(book, tag) ? "tag-chip-selected" : "") @(_pendingTagIds.Contains(tag.Id) ? "tag-chip-pending" : "")" aria-pressed="@(IsTagged(book, tag) ? "true" : "false")" @onclick="() => ToggleTagAsync(book, tag)">@tag.Name</button>
+                        @if (_failedTagIds.Contains(tag.Id))
+                        {
+                            <span class="tag-chip-error" role="alert">Couldn't update "@tag.Name".</span>
+                        }
+                    </li>
                 }
             </ul>
         }
@@ -77,6 +85,8 @@
     private TagsLoader? _tagsLoader;
     private CancellationTokenSource? _cts;
     private Guid? _loadedId;
+    private readonly HashSet<Guid> _pendingTagIds = [];
+    private readonly HashSet<Guid> _failedTagIds = [];
 
     private IReadOnlyList<TagDto> AvailableTags =>
         _tagsLoader?.Result is Result<IReadOnlyList<TagDto>, TagsApiError>.Success success ? success.Value : [];
@@ -85,6 +95,8 @@
     {
         if (_loadedId == Id) return;
         _loadedId = Id;
+        _pendingTagIds.Clear();
+        _failedTagIds.Clear();
 
         _tagsLoader ??= new TagsLoader(TagsCache);
         _ = ReloadTagsAsync();
@@ -94,6 +106,61 @@
     private Task ReloadTagsAsync() => _tagsLoader!.LoadAsync(StateHasChanged);
 
     private static bool IsTagged(BookDto book, TagDto tag) => book.Tags.Any(t => t.Id == tag.Id);
+
+    private async Task ToggleTagAsync(BookDto book, TagDto tag)
+    {
+        if (_pendingTagIds.Contains(tag.Id)) return;
+
+        var loadedId = _loadedId;
+        var wasTagged = IsTagged(book, tag);
+        _failedTagIds.Remove(tag.Id);
+        _pendingTagIds.Add(tag.Id);
+        ApplyTagChange(tag, add: !wasTagged);
+
+        Result<BookTagsApiError> result;
+        try
+        {
+            result = wasTagged
+                ? await BookTagsApiClient.UntagBookAsync(book.Id, tag.Id, _cts?.Token ?? default)
+                : await BookTagsApiClient.TagBookAsync(book.Id, tag.Id, _cts?.Token ?? default);
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by navigating to a different book or the component being disposed.
+            return;
+        }
+
+        if (loadedId != _loadedId) return;
+
+        _pendingTagIds.Remove(tag.Id);
+        if (result is Result<BookTagsApiError>.Failure)
+        {
+            _failedTagIds.Add(tag.Id);
+            ApplyTagChange(tag, add: wasTagged);
+        }
+    }
+
+    // Derives from the current _result rather than a snapshot captured when the toggle
+    // started, so a concurrent toggle of a different tag can't be clobbered by this one's
+    // apply/revert (see the two-tags-in-flight regression test).
+    private void ApplyTagChange(TagDto tag, bool add)
+    {
+        if (_result is not Result<BookDto, BooksApiError>.Success success) return;
+
+        var tags = success.Value.Tags;
+        var updated = add
+            ? (tags.Any(t => t.Id == tag.Id) ? tags : [.. tags, tag])
+            : tags.Where(t => t.Id != tag.Id).ToList();
+        SetBookTags(updated);
+    }
+
+    private void SetBookTags(IReadOnlyList<TagDto> tags)
+    {
+        if (_result is Result<BookDto, BooksApiError>.Success success)
+        {
+            _result = new Result<BookDto, BooksApiError>.Success(success.Value with { Tags = tags });
+        }
+    }
 
     private void NavigateBack() => Navigation.NavigateTo("/");
 
