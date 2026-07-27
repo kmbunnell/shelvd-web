@@ -45,38 +45,58 @@
     else if (_result is Result<BookDto, BooksApiError>.Success success)
     {
         var book = success.Value;
-        <div class="book-cover">
-            <div class="cover-frame">
-                <img src="@(book.CoverImageUrl ?? BookCoverDefaults.PlaceholderCoverUrl)" alt="Cover of @book.Title" />
-                <button type="button" class="delete-button" aria-label="Delete book from library">
-                    <span aria-hidden="true">&#128465;&#65038;</span>
-                </button>
+        <div class="book-details-content" inert="@_confirmingDelete">
+            <div class="book-cover">
+                <div class="cover-frame">
+                    <img src="@(book.CoverImageUrl ?? BookCoverDefaults.PlaceholderCoverUrl)" alt="Cover of @book.Title" />
+                    <button type="button" class="delete-button" aria-label="Delete book from library" @onclick="RequestDelete">
+                        <span aria-hidden="true">&#128465;&#65038;</span>
+                    </button>
+                </div>
             </div>
-        </div>
-        @if (_tagsLoader?.Result is Result<IReadOnlyList<TagDto>, TagsApiError>.Failure)
-        {
-            <p class="error-state" role="alert">Couldn't load tags.</p>
-            <button type="button" class="retry-button" @onclick="ReloadTagsAsync">Retry</button>
-        }
-        else
-        {
-            <ul class="tag-grid">
-                @foreach (var tag in AvailableTags)
+            <div class="status-strip" role="alert">
+                @if (_deleteFailed)
                 {
-                    <li class="tag-chip-item" @key="tag.Id">
-                        <button type="button" class="tag-chip @(IsTagged(book, tag) ? "tag-chip-selected" : "") @(_pendingTagIds.Contains(tag.Id) ? "tag-chip-pending" : "") @(_failedTagIds.Contains(tag.Id) ? "tag-chip-error" : "")" aria-pressed="@(IsTagged(book, tag) ? "true" : "false")" @onclick="() => ToggleTagAsync(book, tag)">@tag.Name</button>
-                    </li>
+                    <span>Couldn't delete this book.</span>
+                    <button type="button" class="retry-link" @onclick="() => ConfirmDeleteAsync(book)">Retry</button>
+                    <button type="button" class="dismiss-link" aria-label="Dismiss" @onclick="DismissDeleteFailure">&times;</button>
                 }
-            </ul>
-            <div class="tag-status-strip" role="alert">
-                @if (_lastFailedTag is { } failedTag)
+                else if (_lastFailedTag is { } failedTag)
                 {
                     <span>Couldn't update "@failedTag.Name".</span>
                     <button type="button" class="retry-link" @onclick="() => ToggleTagAsync(book, failedTag)">Retry</button>
                 }
             </div>
+            @if (_tagsLoader?.Result is Result<IReadOnlyList<TagDto>, TagsApiError>.Failure)
+            {
+                <p class="error-state" role="alert">Couldn't load tags.</p>
+                <button type="button" class="retry-button" @onclick="ReloadTagsAsync">Retry</button>
+            }
+            else
+            {
+                <ul class="tag-grid">
+                    @foreach (var tag in AvailableTags)
+                    {
+                        <li class="tag-chip-item" @key="tag.Id">
+                            <button type="button" class="tag-chip @(IsTagged(book, tag) ? "tag-chip-selected" : "") @(_pendingTagIds.Contains(tag.Id) ? "tag-chip-pending" : "") @(_failedTagIds.Contains(tag.Id) ? "tag-chip-error" : "")" aria-pressed="@(IsTagged(book, tag) ? "true" : "false")" @onclick="() => ToggleTagAsync(book, tag)">@tag.Name</button>
+                        </li>
+                    }
+                </ul>
+            }
+            <button type="button" class="manage-tags-button">Manage Tags</button>
+        </div>
+        @if (_confirmingDelete)
+        {
+            <div class="delete-confirm-overlay" @onclick="CancelDelete">
+                <div class="delete-confirm" role="alertdialog" aria-modal="true" aria-labelledby="delete-confirm-heading" @onclick:stopPropagation="true">
+                    <p id="delete-confirm-heading">Delete this book from your library?</p>
+                    <div class="delete-confirm-actions">
+                        <button type="button" class="confirm-delete-button" disabled="@_deleteInFlight" @onclick="() => ConfirmDeleteAsync(book)">Delete</button>
+                        <button type="button" class="cancel-delete-button" disabled="@_deleteInFlight" @onclick="CancelDelete">Cancel</button>
+                    </div>
+                </div>
+            </div>
         }
-        <button type="button" class="manage-tags-button">Manage Tags</button>
     }
 </div>
 
@@ -91,6 +111,9 @@
     private readonly HashSet<Guid> _pendingTagIds = [];
     private readonly HashSet<Guid> _failedTagIds = [];
     private TagDto? _lastFailedTag;
+    private bool _confirmingDelete;
+    private bool _deleteInFlight;
+    private bool _deleteFailed;
 
     private IReadOnlyList<TagDto> AvailableTags =>
         _tagsLoader?.Result is Result<IReadOnlyList<TagDto>, TagsApiError>.Success success ? success.Value : [];
@@ -102,6 +125,9 @@
         _pendingTagIds.Clear();
         _failedTagIds.Clear();
         _lastFailedTag = null;
+        _confirmingDelete = false;
+        _deleteInFlight = false;
+        _deleteFailed = false;
 
         _tagsLoader ??= new TagsLoader(TagsCache);
         _ = ReloadTagsAsync();
@@ -114,7 +140,7 @@
 
     private async Task ToggleTagAsync(BookDto book, TagDto tag)
     {
-        if (_pendingTagIds.Contains(tag.Id)) return;
+        if (_confirmingDelete || _pendingTagIds.Contains(tag.Id)) return;
 
         var loadedId = _loadedId;
         var wasTagged = IsTagged(book, tag);
@@ -170,6 +196,49 @@
     }
 
     private void NavigateBack() => Navigation.NavigateTo("/");
+
+    private void RequestDelete()
+    {
+        _confirmingDelete = true;
+        _deleteFailed = false;
+    }
+
+    private void CancelDelete()
+    {
+        if (_deleteInFlight) return;
+        _confirmingDelete = false;
+    }
+
+    private void DismissDeleteFailure() => _deleteFailed = false;
+
+    private async Task ConfirmDeleteAsync(BookDto book)
+    {
+        _deleteInFlight = true;
+        _deleteFailed = false;
+
+        Result<BooksApiError> result;
+        try
+        {
+            result = await BooksApiClient.DeleteBookAsync(book.Id, _cts?.Token ?? default);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (result is Result<BooksApiError>.Success)
+        {
+            Navigation.NavigateTo("/");
+            return;
+        }
+
+        _deleteInFlight = false;
+        // Confirmation is a one-time gate on the initial ask, not re-shown on retry:
+        // the user already confirmed intent to delete, so Retry re-attempts the same
+        // delete directly rather than asking again.
+        _confirmingDelete = false;
+        _deleteFailed = true;
+    }
 
     private async Task LoadBookAsync()
     {

@@ -8,4 +8,6 @@ public interface IBooksApiClient
     Task<Result<IReadOnlyList<BookDto>, BooksApiError>> GetBooksAsync(CancellationToken cancellationToken = default);
 
     Task<Result<BookDto, BooksApiError>> GetBookAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<Result<BooksApiError>> DeleteBookAsync(Guid id, CancellationToken cancellationToken = default);
 }

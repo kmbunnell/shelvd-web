@@ -46,6 +46,21 @@ public sealed class BooksService(IHttpClientFactory httpClientFactory, ILogger<B
         };
     }
 
+    public Task<Result<BooksError>> DeleteBookAsync(string accessToken, Guid id) =>
+        _restClient.DeleteAsync<BooksError>(
+            SupabaseRestHttpClientName,
+            resourceName: "books",
+            path: "books",
+            query: new Dictionary<string, string?>
+            {
+                ["id"] = $"eq.{id}"
+            },
+            accessToken,
+            logger,
+            mapStatusError: statusCode => statusCode == HttpStatusCode.Unauthorized ? BooksError.Unauthenticated : BooksError.Unknown,
+            networkError: BooksError.NetworkError,
+            unknownError: BooksError.Unknown);
+
     private Task<Result<IReadOnlyList<RawBookDto>, BooksError>> QueryBooksAsync(
         string accessToken, IDictionary<string, string?> extraQuery)
     {

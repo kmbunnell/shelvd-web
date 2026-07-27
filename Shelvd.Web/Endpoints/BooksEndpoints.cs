@@ -26,6 +26,9 @@ internal static class BooksEndpoints
                     BooksError.Unauthenticated => Results.Unauthorized(),
                     _ => Results.StatusCode(StatusCodes.Status502BadGateway)
                 },
+                // Result<TValue, TError> is a closed hierarchy (private ctor, only Success/Failure),
+                // but the compiler can't prove that, so this arm is required to compile under
+                // TreatWarningsAsErrors even though it's unreachable at runtime.
                 _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
             };
         })
@@ -45,6 +48,28 @@ internal static class BooksEndpoints
                 Result<BookDto?, BooksError>.Success { Value: null } => Results.NotFound(),
                 Result<BookDto?, BooksError>.Success success => Results.Ok(success.Value),
                 Result<BookDto?, BooksError>.Failure failure => failure.Error switch
+                {
+                    BooksError.Unauthenticated => Results.Unauthorized(),
+                    _ => Results.StatusCode(StatusCodes.Status502BadGateway)
+                },
+                _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+            };
+        })
+        .RequireAuthorization();
+
+        app.MapDelete("/api/books/{id:guid}", async (HttpContext httpContext, IBooksService booksService, Guid id) =>
+        {
+            var accessToken = httpContext.GetAccessToken();
+            if (accessToken is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await booksService.DeleteBookAsync(accessToken, id);
+            return result switch
+            {
+                Result<BooksError>.Success => Results.NoContent(),
+                Result<BooksError>.Failure failure => failure.Error switch
                 {
                     BooksError.Unauthenticated => Results.Unauthorized(),
                     _ => Results.StatusCode(StatusCodes.Status502BadGateway)

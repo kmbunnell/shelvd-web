@@ -8,4 +8,6 @@ public interface IBooksService
     Task<Result<IReadOnlyList<BookDto>, BooksError>> GetBooksAsync(string accessToken);
 
     Task<Result<BookDto?, BooksError>> GetBookByIdAsync(string accessToken, Guid id);
+
+    Task<Result<BooksError>> DeleteBookAsync(string accessToken, Guid id);
 }
