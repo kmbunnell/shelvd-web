@@ -133,15 +133,66 @@ public class BooksEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.NotEqual(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task DeleteBook_ReturnsNoContent_WhenAuthenticatedAndServiceSucceeds()
+    {
+        var id = Guid.NewGuid();
+        var booksService = new StubBooksService(deleteResult: new Result<BooksError>.Success());
+        var client = WithBooksService(booksService).CreateClient();
+
+        var response = await client.DeleteAsync($"/api/books/{id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteBook_ReturnsUnauthorized_WhenNotAuthenticated()
+    {
+        var id = Guid.NewGuid();
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.DeleteAsync($"/api/books/{id}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteBook_ReturnsUnauthorized_WhenServiceReturnsUnauthenticated()
+    {
+        var id = Guid.NewGuid();
+        var booksService = new StubBooksService(deleteResult: new Result<BooksError>.Failure(BooksError.Unauthenticated));
+        var client = WithBooksService(booksService).CreateClient();
+
+        var response = await client.DeleteAsync($"/api/books/{id}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteBook_ReturnsBadGateway_WhenServiceFailsForOtherReasons()
+    {
+        var id = Guid.NewGuid();
+        var booksService = new StubBooksService(deleteResult: new Result<BooksError>.Failure(BooksError.Unknown));
+        var client = WithBooksService(booksService).CreateClient();
+
+        var response = await client.DeleteAsync($"/api/books/{id}");
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+    }
+
     private sealed class StubBooksService(
         Result<IReadOnlyList<BookDto>, BooksError>? result = null,
-        Result<BookDto?, BooksError>? byIdResult = null) : IBooksService
+        Result<BookDto?, BooksError>? byIdResult = null,
+        Result<BooksError>? deleteResult = null) : IBooksService
     {
         public Task<Result<IReadOnlyList<BookDto>, BooksError>> GetBooksAsync(string accessToken) =>
             Task.FromResult(result!);
 
         public Task<Result<BookDto?, BooksError>> GetBookByIdAsync(string accessToken, Guid id) =>
             Task.FromResult(byIdResult!);
+
+        public Task<Result<BooksError>> DeleteBookAsync(string accessToken, Guid id) =>
+            Task.FromResult(deleteResult!);
     }
 
     private sealed class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>

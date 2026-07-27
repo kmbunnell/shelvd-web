@@ -199,4 +199,69 @@ public class BooksApiClientTests
         var failure = Assert.IsType<Result<Shelvd.Web.Client.Models.BookDto, BooksApiError>.Failure>(result);
         Assert.Equal(BooksApiError.NetworkError, failure.Error);
     }
+
+    [Fact]
+    public async Task DeleteBookAsync_SendsDeleteToBooksRoute()
+    {
+        var id = Guid.NewGuid();
+        HttpRequestMessage? capturedRequest = null;
+        var httpClient = CreateHttpClient(HttpStatusCode.NoContent, content: null, request => capturedRequest = request);
+        var sut = new BooksApiClient(httpClient, _logger);
+
+        await sut.DeleteBookAsync(id);
+
+        Assert.NotNull(capturedRequest);
+        Assert.Equal(HttpMethod.Delete, capturedRequest!.Method);
+        Assert.Equal($"/api/books/{id}", capturedRequest.RequestUri!.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task DeleteBookAsync_ReturnsSuccess_WhenResponseIsSuccessful()
+    {
+        var id = Guid.NewGuid();
+        var httpClient = CreateHttpClient(HttpStatusCode.NoContent, content: null);
+        var sut = new BooksApiClient(httpClient, _logger);
+
+        var result = await sut.DeleteBookAsync(id);
+
+        Assert.IsType<Result<BooksApiError>.Success>(result);
+    }
+
+    [Fact]
+    public async Task DeleteBookAsync_ReturnsUnauthenticated_WhenResponseIsUnauthorized()
+    {
+        var id = Guid.NewGuid();
+        var httpClient = CreateHttpClient(HttpStatusCode.Unauthorized, content: null);
+        var sut = new BooksApiClient(httpClient, _logger);
+
+        var result = await sut.DeleteBookAsync(id);
+
+        var failure = Assert.IsType<Result<BooksApiError>.Failure>(result);
+        Assert.Equal(BooksApiError.Unauthenticated, failure.Error);
+    }
+
+    [Fact]
+    public async Task DeleteBookAsync_ReturnsNetworkError_WhenHttpCallThrows()
+    {
+        var id = Guid.NewGuid();
+        var httpClient = CreateThrowingHttpClient(new HttpRequestException("network unreachable"));
+        var sut = new BooksApiClient(httpClient, _logger);
+
+        var result = await sut.DeleteBookAsync(id);
+
+        var failure = Assert.IsType<Result<BooksApiError>.Failure>(result);
+        Assert.Equal(BooksApiError.NetworkError, failure.Error);
+    }
+
+    [Fact]
+    public async Task DeleteBookAsync_ThrowsOperationCanceled_WhenTokenIsAlreadyCancelled()
+    {
+        var id = Guid.NewGuid();
+        var httpClient = CreateThrowingHttpClient(new OperationCanceledException());
+        var sut = new BooksApiClient(httpClient, _logger);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.DeleteBookAsync(id, cts.Token));
+    }
 }

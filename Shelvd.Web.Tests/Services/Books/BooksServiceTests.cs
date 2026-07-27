@@ -315,4 +315,73 @@ public class BooksServiceTests
         var failure = Assert.IsType<Result<BookDto?, BooksError>.Failure>(result);
         Assert.Equal(BooksError.MalformedResponse, failure.Error);
     }
+
+    [Fact]
+    public async Task DeleteBookAsync_DeletesBookWithIdFilterAndBearerToken()
+    {
+        var id = Guid.NewGuid();
+        HttpRequestMessage? capturedRequest = null;
+        var factory = CreateHttpClientFactory(HttpStatusCode.NoContent, content: null, request => capturedRequest = request);
+        var sut = new BooksService(factory.Object, _logger);
+
+        await sut.DeleteBookAsync("access-token", id);
+
+        Assert.NotNull(capturedRequest);
+        Assert.Equal(HttpMethod.Delete, capturedRequest!.Method);
+        Assert.Equal("/rest/v1/books", capturedRequest.RequestUri!.AbsolutePath);
+        Assert.Contains($"id=eq.{id}", Uri.UnescapeDataString(capturedRequest.RequestUri.Query));
+        Assert.Equal("Bearer", capturedRequest.Headers.Authorization?.Scheme);
+        Assert.Equal("access-token", capturedRequest.Headers.Authorization?.Parameter);
+    }
+
+    [Fact]
+    public async Task DeleteBookAsync_ReturnsSuccess_WhenResponseIsNoContent()
+    {
+        var id = Guid.NewGuid();
+        var factory = CreateHttpClientFactory(HttpStatusCode.NoContent, content: null);
+        var sut = new BooksService(factory.Object, _logger);
+
+        var result = await sut.DeleteBookAsync("access-token", id);
+
+        Assert.IsType<Result<BooksError>.Success>(result);
+    }
+
+    [Fact]
+    public async Task DeleteBookAsync_ReturnsUnauthenticated_WhenResponseIsUnauthorized()
+    {
+        var id = Guid.NewGuid();
+        var factory = CreateHttpClientFactory(HttpStatusCode.Unauthorized, content: null);
+        var sut = new BooksService(factory.Object, _logger);
+
+        var result = await sut.DeleteBookAsync("access-token", id);
+
+        var failure = Assert.IsType<Result<BooksError>.Failure>(result);
+        Assert.Equal(BooksError.Unauthenticated, failure.Error);
+    }
+
+    [Fact]
+    public async Task DeleteBookAsync_ReturnsUnknown_WhenResponseIsNotSuccessAndNotUnauthorized()
+    {
+        var id = Guid.NewGuid();
+        var factory = CreateHttpClientFactory(HttpStatusCode.InternalServerError, content: null);
+        var sut = new BooksService(factory.Object, _logger);
+
+        var result = await sut.DeleteBookAsync("access-token", id);
+
+        var failure = Assert.IsType<Result<BooksError>.Failure>(result);
+        Assert.Equal(BooksError.Unknown, failure.Error);
+    }
+
+    [Fact]
+    public async Task DeleteBookAsync_ReturnsNetworkError_WhenHttpCallThrows()
+    {
+        var id = Guid.NewGuid();
+        var factory = CreateThrowingHttpClientFactory(new HttpRequestException("network unreachable"));
+        var sut = new BooksService(factory.Object, _logger);
+
+        var result = await sut.DeleteBookAsync("access-token", id);
+
+        var failure = Assert.IsType<Result<BooksError>.Failure>(result);
+        Assert.Equal(BooksError.NetworkError, failure.Error);
+    }
 }

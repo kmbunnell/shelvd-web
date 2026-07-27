@@ -78,4 +78,36 @@ public sealed class BooksApiClient(HttpClient httpClient, ILogger<BooksApiClient
             return new Result<BookDto, BooksApiError>.Failure(BooksApiError.Unknown);
         }
     }
+
+    public async Task<Result<BooksApiError>> DeleteBookAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response = await httpClient.DeleteAsync($"api/books/{id}", cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new Result<BooksApiError>.Failure(
+                    response.StatusCode == HttpStatusCode.Unauthorized
+                        ? BooksApiError.Unauthenticated
+                        : BooksApiError.Unknown);
+            }
+
+            return new Result<BooksApiError>.Success();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Network error while deleting book {BookId}.", id);
+            return new Result<BooksApiError>.Failure(BooksApiError.NetworkError);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected error while deleting book {BookId}.", id);
+            return new Result<BooksApiError>.Failure(BooksApiError.Unknown);
+        }
+    }
 }

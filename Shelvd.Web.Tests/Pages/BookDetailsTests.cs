@@ -180,7 +180,7 @@ public class BookDetailsTests : BunitContext
         var cut = RenderBookDetails();
         cut.Find(".tag-chip").Click();
 
-        var strip = cut.Find(".tag-status-strip");
+        var strip = cut.Find(".status-strip");
         Assert.Contains("Couldn't update \"Fantasy\".", strip.TextContent);
         strip.QuerySelector("button.retry-link");
         Assert.NotNull(strip.QuerySelector("button.retry-link"));
@@ -209,7 +209,7 @@ public class BookDetailsTests : BunitContext
         _bookTagsApiClient.Verify(c => c.TagBookAsync(_bookId, fantasyTag.Id, It.IsAny<CancellationToken>()), Times.Exactly(2));
         Assert.Contains(cut.FindAll(".tag-chip"), e => e.ClassList.Contains("tag-chip-selected"));
         Assert.DoesNotContain(cut.FindAll(".tag-chip"), e => e.ClassList.Contains("tag-chip-error"));
-        Assert.DoesNotContain("Couldn't update", cut.Find(".tag-status-strip").TextContent);
+        Assert.DoesNotContain("Couldn't update", cut.Find(".status-strip").TextContent);
     }
 
     [Fact]
@@ -235,7 +235,7 @@ public class BookDetailsTests : BunitContext
         cut.FindAll(".tag-chip").Single(e => e.TextContent == "Fantasy").Click();
         cut.FindAll(".tag-chip").Single(e => e.TextContent == "Mystery").Click();
 
-        var strip = cut.Find(".tag-status-strip");
+        var strip = cut.Find(".status-strip");
         Assert.Contains("Couldn't update \"Mystery\".", strip.TextContent);
         Assert.DoesNotContain("Fantasy", strip.TextContent);
         Assert.Contains(cut.FindAll(".tag-chip"), e => e.TextContent == "Fantasy" && e.ClassList.Contains("tag-chip-error"));
@@ -457,7 +457,7 @@ public class BookDetailsTests : BunitContext
     }
 
     [Fact]
-    public void BookDetails_RendersDeleteButton_WithNoClickHandler()
+    public void BookDetails_ClickingDeleteButton_ShowsConfirmationPrompt()
     {
         var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
         _booksApiClient
@@ -465,9 +465,131 @@ public class BookDetailsTests : BunitContext
             .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
 
         var cut = RenderBookDetails();
+        cut.Find("button.delete-button").Click();
 
-        var button = cut.Find("button.delete-button");
-        Assert.Equal("Delete book from library", button.GetAttribute("aria-label"));
-        Assert.Throws<MissingEventHandlerException>(() => button.Click());
+        Assert.NotNull(cut.Find(".delete-confirm"));
+        _booksApiClient.Verify(c => c.DeleteBookAsync(_bookId, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void BookDetails_ClickingDeleteButton_DisablesUnderlyingContentAndBlocksTagToggle()
+    {
+        var fantasyTag = new TagDto(Guid.NewGuid(), "Fantasy", false);
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+        _tagsCache
+            .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasyTag]));
+
+        var cut = RenderBookDetails();
+        cut.Find("button.delete-button").Click();
+
+        Assert.True(cut.Find(".book-details-content").HasAttribute("inert"));
+
+        cut.Find(".tag-chip").Click();
+        Assert.DoesNotContain(cut.FindAll(".tag-chip"), e => e.ClassList.Contains("tag-chip-selected"));
+        _bookTagsApiClient.Verify(
+            c => c.TagBookAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public void BookDetails_ClickingCancelInConfirmation_HidesPromptWithoutDeleting()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+
+        var cut = RenderBookDetails();
+        cut.Find("button.delete-button").Click();
+        cut.Find("button.cancel-delete-button").Click();
+
+        Assert.Empty(cut.FindAll(".delete-confirm"));
+        _booksApiClient.Verify(c => c.DeleteBookAsync(_bookId, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void BookDetails_ConfirmingDelete_CallsDeleteBookAsyncAndNavigatesHome_OnSuccess()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+        _booksApiClient
+            .Setup(c => c.DeleteBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BooksApiError>.Success());
+        var navigation = Services.GetRequiredService<BunitNavigationManager>();
+
+        var cut = RenderBookDetails();
+        cut.Find("button.delete-button").Click();
+        cut.Find("button.confirm-delete-button").Click();
+
+        _booksApiClient.Verify(c => c.DeleteBookAsync(_bookId, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(navigation.BaseUri, navigation.Uri);
+    }
+
+    [Fact]
+    public void BookDetails_ConfirmingDelete_ShowsErrorStrip_WhenDeleteFails()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+        _booksApiClient
+            .Setup(c => c.DeleteBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BooksApiError>.Failure(BooksApiError.Unknown));
+        var navigation = Services.GetRequiredService<BunitNavigationManager>();
+
+        var cut = RenderBookDetails();
+        cut.Find("button.delete-button").Click();
+        cut.Find("button.confirm-delete-button").Click();
+
+        var strip = cut.Find(".status-strip");
+        Assert.NotNull(strip.QuerySelector("button.retry-link"));
+        Assert.Equal(navigation.BaseUri, navigation.Uri);
+    }
+
+    [Fact]
+    public void BookDetails_ClickingRetryAfterFailedDelete_ReinvokesDeleteBookAsync()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+        _booksApiClient
+            .SetupSequence(c => c.DeleteBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BooksApiError>.Failure(BooksApiError.Unknown))
+            .ReturnsAsync(new Result<BooksApiError>.Success());
+        var navigation = Services.GetRequiredService<BunitNavigationManager>();
+
+        var cut = RenderBookDetails();
+        cut.Find("button.delete-button").Click();
+        cut.Find("button.confirm-delete-button").Click();
+        cut.Find(".status-strip button.retry-link").Click();
+
+        _booksApiClient.Verify(c => c.DeleteBookAsync(_bookId, It.IsAny<CancellationToken>()), Times.Exactly(2));
+        Assert.Equal(navigation.BaseUri, navigation.Uri);
+    }
+
+    [Fact]
+    public void BookDetails_ClickingDismissAfterFailedDelete_ClearsErrorStrip()
+    {
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+        _booksApiClient
+            .Setup(c => c.DeleteBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BooksApiError>.Failure(BooksApiError.Unknown));
+
+        var cut = RenderBookDetails();
+        cut.Find("button.delete-button").Click();
+        cut.Find("button.confirm-delete-button").Click();
+        cut.Find(".status-strip button.dismiss-link").Click();
+
+        Assert.Empty(cut.Find(".status-strip").TextContent.Trim());
     }
 }
