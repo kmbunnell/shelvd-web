@@ -5,6 +5,7 @@ using Shelvd.Web.Components;
 using Shelvd.Web.Endpoints;
 using Shelvd.Web.Middleware;
 using Shelvd.Web.Services.Auth;
+using Shelvd.Web.Services.BookTags;
 using Shelvd.Web.Services.Books;
 using Shelvd.Web.Services.Tags;
 using Supabase.Gotrue;
@@ -93,6 +94,7 @@ builder.Services.AddScoped<IAuthCookieService, HttpContextAuthCookieService>();
 builder.Services.AddScoped<IAccessTokenRefreshService, AccessTokenRefreshService>();
 builder.Services.AddScoped<IBooksService, BooksService>();
 builder.Services.AddScoped<ITagsService, TagsService>();
+builder.Services.AddScoped<IBookTagsService, BookTagsService>();
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, PersistingAuthenticationStateProvider>();
@@ -111,6 +113,7 @@ else
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.UseMiddleware<DisableStatusCodePagesForApiMiddleware>();
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
@@ -133,6 +136,7 @@ app.MapRazorComponents<App>()
 app.MapAuthEndpoints();
 app.MapBooksEndpoints();
 app.MapTagsEndpoints();
+app.MapBookTagsEndpoints();
 
 app.Run();
 
