@@ -4,8 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Shelvd.Web.Client.Models;
 using Shelvd.Web.Client.Pages;
-using Shelvd.Web.Client.Services.BookTags;
 using Shelvd.Web.Client.Services.Books;
+using Shelvd.Web.Client.Services.BookTags;
 using Shelvd.Web.Client.Services.Tags;
 using Shelvd.Web.Shared.Common;
 
