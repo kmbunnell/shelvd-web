@@ -141,7 +141,7 @@ public class BookDetailsTests : BunitContext
     }
 
     [Fact]
-    public void BookDetails_FailedToggle_RevertsChipAndShowsInlineError()
+    public void BookDetails_FailedToggle_RevertsChipAndShowsErrorState()
     {
         var fantasyTag = new TagDto(Guid.NewGuid(), "Fantasy", false);
         var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
@@ -159,7 +159,87 @@ public class BookDetailsTests : BunitContext
         cut.Find(".tag-chip").Click();
 
         Assert.DoesNotContain(cut.FindAll(".tag-chip"), e => e.ClassList.Contains("tag-chip-selected"));
-        Assert.NotEmpty(cut.FindAll(".tag-chip-error"));
+        Assert.Contains(cut.FindAll(".tag-chip"), e => e.ClassList.Contains("tag-chip-error"));
+    }
+
+    [Fact]
+    public void BookDetails_FailedToggle_ShowsStatusStripWithTagNameAndRetryButton()
+    {
+        var fantasyTag = new TagDto(Guid.NewGuid(), "Fantasy", false);
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+        _tagsCache
+            .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasyTag]));
+        _bookTagsApiClient
+            .Setup(c => c.TagBookAsync(_bookId, fantasyTag.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookTagsApiError>.Failure(BookTagsApiError.Unknown));
+
+        var cut = RenderBookDetails();
+        cut.Find(".tag-chip").Click();
+
+        var strip = cut.Find(".tag-status-strip");
+        Assert.Contains("Couldn't update \"Fantasy\".", strip.TextContent);
+        strip.QuerySelector("button.retry-link");
+        Assert.NotNull(strip.QuerySelector("button.retry-link"));
+    }
+
+    [Fact]
+    public void BookDetails_ClickingStripRetryButton_ReinvokesApiClientForFailedTag()
+    {
+        var fantasyTag = new TagDto(Guid.NewGuid(), "Fantasy", false);
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+        _tagsCache
+            .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasyTag]));
+        _bookTagsApiClient
+            .SetupSequence(c => c.TagBookAsync(_bookId, fantasyTag.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookTagsApiError>.Failure(BookTagsApiError.Unknown))
+            .ReturnsAsync(new Result<BookTagsApiError>.Success());
+
+        var cut = RenderBookDetails();
+        cut.Find(".tag-chip").Click();
+        cut.Find("button.retry-link").Click();
+
+        _bookTagsApiClient.Verify(c => c.TagBookAsync(_bookId, fantasyTag.Id, It.IsAny<CancellationToken>()), Times.Exactly(2));
+        Assert.Contains(cut.FindAll(".tag-chip"), e => e.ClassList.Contains("tag-chip-selected"));
+        Assert.DoesNotContain(cut.FindAll(".tag-chip"), e => e.ClassList.Contains("tag-chip-error"));
+        Assert.DoesNotContain("Couldn't update", cut.Find(".tag-status-strip").TextContent);
+    }
+
+    [Fact]
+    public void BookDetails_SecondTagFailing_UpdatesStripToLatestTag_ButKeepsFirstChipErrorState()
+    {
+        var fantasyTag = new TagDto(Guid.NewGuid(), "Fantasy", false);
+        var mysteryTag = new TagDto(Guid.NewGuid(), "Mystery", false);
+        var book = new BookDto(_bookId, "9780000000000", "Test Book", ["Author One"], null, DateTimeOffset.UtcNow, []);
+        _booksApiClient
+            .Setup(c => c.GetBookAsync(_bookId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookDto, BooksApiError>.Success(book));
+        _tagsCache
+            .Setup(c => c.GetTagsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<IReadOnlyList<TagDto>, TagsApiError>.Success([fantasyTag, mysteryTag]));
+        _bookTagsApiClient
+            .Setup(c => c.TagBookAsync(_bookId, fantasyTag.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookTagsApiError>.Failure(BookTagsApiError.Unknown));
+        _bookTagsApiClient
+            .Setup(c => c.TagBookAsync(_bookId, mysteryTag.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Result<BookTagsApiError>.Failure(BookTagsApiError.Unknown));
+
+        var cut = RenderBookDetails();
+        cut.FindAll(".tag-chip").Single(e => e.TextContent == "Fantasy").Click();
+        cut.FindAll(".tag-chip").Single(e => e.TextContent == "Mystery").Click();
+
+        var strip = cut.Find(".tag-status-strip");
+        Assert.Contains("Couldn't update \"Mystery\".", strip.TextContent);
+        Assert.DoesNotContain("Fantasy", strip.TextContent);
+        Assert.Contains(cut.FindAll(".tag-chip"), e => e.TextContent == "Fantasy" && e.ClassList.Contains("tag-chip-error"));
+        Assert.Contains(cut.FindAll(".tag-chip"), e => e.TextContent == "Mystery" && e.ClassList.Contains("tag-chip-error"));
     }
 
     [Fact]

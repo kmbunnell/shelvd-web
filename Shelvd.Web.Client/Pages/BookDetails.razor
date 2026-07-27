@@ -64,14 +64,17 @@
                 @foreach (var tag in AvailableTags)
                 {
                     <li class="tag-chip-item" @key="tag.Id">
-                        <button type="button" class="tag-chip @(IsTagged(book, tag) ? "tag-chip-selected" : "") @(_pendingTagIds.Contains(tag.Id) ? "tag-chip-pending" : "")" aria-pressed="@(IsTagged(book, tag) ? "true" : "false")" @onclick="() => ToggleTagAsync(book, tag)">@tag.Name</button>
-                        @if (_failedTagIds.Contains(tag.Id))
-                        {
-                            <span class="tag-chip-error" role="alert">Couldn't update "@tag.Name".</span>
-                        }
+                        <button type="button" class="tag-chip @(IsTagged(book, tag) ? "tag-chip-selected" : "") @(_pendingTagIds.Contains(tag.Id) ? "tag-chip-pending" : "") @(_failedTagIds.Contains(tag.Id) ? "tag-chip-error" : "")" aria-pressed="@(IsTagged(book, tag) ? "true" : "false")" @onclick="() => ToggleTagAsync(book, tag)">@tag.Name</button>
                     </li>
                 }
             </ul>
+            <div class="tag-status-strip" role="alert">
+                @if (_lastFailedTag is { } failedTag)
+                {
+                    <span>Couldn't update "@failedTag.Name".</span>
+                    <button type="button" class="retry-link" @onclick="() => ToggleTagAsync(book, failedTag)">Retry</button>
+                }
+            </div>
         }
         <button type="button" class="manage-tags-button">Manage Tags</button>
     }
@@ -87,6 +90,7 @@
     private Guid? _loadedId;
     private readonly HashSet<Guid> _pendingTagIds = [];
     private readonly HashSet<Guid> _failedTagIds = [];
+    private TagDto? _lastFailedTag;
 
     private IReadOnlyList<TagDto> AvailableTags =>
         _tagsLoader?.Result is Result<IReadOnlyList<TagDto>, TagsApiError>.Success success ? success.Value : [];
@@ -97,6 +101,7 @@
         _loadedId = Id;
         _pendingTagIds.Clear();
         _failedTagIds.Clear();
+        _lastFailedTag = null;
 
         _tagsLoader ??= new TagsLoader(TagsCache);
         _ = ReloadTagsAsync();
@@ -114,6 +119,7 @@
         var loadedId = _loadedId;
         var wasTagged = IsTagged(book, tag);
         _failedTagIds.Remove(tag.Id);
+        if (_lastFailedTag?.Id == tag.Id) _lastFailedTag = null;
         _pendingTagIds.Add(tag.Id);
         ApplyTagChange(tag, add: !wasTagged);
 
@@ -136,6 +142,7 @@
         if (result is Result<BookTagsApiError>.Failure)
         {
             _failedTagIds.Add(tag.Id);
+            _lastFailedTag = tag;
             ApplyTagChange(tag, add: wasTagged);
         }
     }
